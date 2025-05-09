@@ -943,7 +943,9 @@ export class OptionAsync<T> implements OptionAsync<T> {
    */
   async map<U>(fn: (value: T) => MaybePromise<U>): Promise<Option<U>> {
     const opt = await this.promise
-    return opt.map((value) => Promise.resolve(fn(value))) as Option<U>
+    if (opt.isNone()) return none<U>()
+    const mappedValue = await Promise.resolve(fn(opt.unwrapOr(undefined as never)))
+    return some(mappedValue)
   }
 
   /**
