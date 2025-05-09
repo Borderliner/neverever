@@ -1,5 +1,5 @@
-import { err, ok, Result, ResultAsync } from 'neverthrow';
-import { Unwrap, MaybePromise, OptionLike, ResultLike, IsPromise } from './types';
+import { err, ok, Result, ResultAsync } from 'neverthrow'
+import { Unwrap, MaybePromise, OptionLike, ResultLike, IsPromise } from './types'
 
 /**
  * Represents an optional value that may contain a value (`Some`) or be empty (`None`).
@@ -19,7 +19,7 @@ export interface Option<T> {
    * console.log(opt2.isSome()); // false
    * ```
    */
-  isSome(): boolean;
+  isSome(): boolean
 
   /**
    * Checks if the Option is empty (`None`).
@@ -33,7 +33,7 @@ export interface Option<T> {
    * console.log(opt2.isNone()); // true
    * ```
    */
-  isNone(): boolean;
+  isNone(): boolean
 
   /**
    * Checks if the Option contains a specific value.
@@ -48,7 +48,7 @@ export interface Option<T> {
    * console.log(none<string>().contains('world')); // false
    * ```
    */
-  contains(value: T): boolean;
+  contains(value: T): boolean
 
   /**
    * Transforms the contained value using a function, returning a new Option.
@@ -65,7 +65,7 @@ export interface Option<T> {
    * console.log(none<number>().map(n => n * 2).unwrapOr(0)); // 0
    * ```
    */
-  map<U>(fn: (value: T) => U): Option<U>;
+  map<U>(fn: (value: T) => U): Option<U>
 
   /**
    * Chains the Option with a function that returns another Option.
@@ -82,7 +82,7 @@ export interface Option<T> {
    * console.log(none<string>().andThen(s => some(s)).unwrapOr('')); // ''
    * ```
    */
-  andThen<U>(fn: (value: T) => Option<U>): Option<U>;
+  andThen<U>(fn: (value: T) => Option<U>): Option<U>
 
   /**
    * Filters the Option based on a predicate. If the predicate returns `false` or the Option is `None`, returns `None`.
@@ -98,7 +98,7 @@ export interface Option<T> {
    * console.log(none<number>().filter(n => n > 5).unwrapOr(0)); // 0
    * ```
    */
-  filter(predicate: (value: T) => boolean): Option<T>;
+  filter(predicate: (value: T) => boolean): Option<T>
 
   /**
    * Combines this Option with another, returning an Option containing a tuple of both values if both are `Some`.
@@ -116,7 +116,7 @@ export interface Option<T> {
    * console.log(opt1.zip(none<number>()).unwrapOr(['', 0])); // ['', 0]
    * ```
    */
-  zip<U>(other: Option<U>): Option<[T, U]>;
+  zip<U>(other: Option<U>): Option<[T, U]>
 
   /**
    * Unwraps a nested Option, returning the inner Option if `Some`, or `None` if the value is not an Option.
@@ -131,7 +131,7 @@ export interface Option<T> {
    * console.log(none<number>().flatten().unwrapOr(0)); // 0
    * ```
    */
-  flatten(): Option<Unwrap<T>>;
+  flatten(): Option<Unwrap<T>>
 
   /**
    * Returns this Option if `Some`, otherwise evaluates the provided function to return an alternative Option.
@@ -146,7 +146,7 @@ export interface Option<T> {
    * console.log(some('value').orElse(() => some('default')).unwrapOr('')); // 'value'
    * ```
    */
-  orElse(fn: () => Option<T>): Option<T>;
+  orElse(fn: () => Option<T>): Option<T>
 
   /**
    * Returns the contained value if `Some`, otherwise returns the provided default value.
@@ -160,7 +160,7 @@ export interface Option<T> {
    * console.log(none<string>().unwrapOr('default')); // 'default'
    * ```
    */
-  unwrapOr(defaultValue: T): T;
+  unwrapOr(defaultValue: T): T
 
   /**
    * Returns the contained value if `Some`, otherwise evaluates the provided function to return a default value.
@@ -174,7 +174,7 @@ export interface Option<T> {
    * console.log(some('value').unwrapOrElse(() => 'default')); // 'value'
    * ```
    */
-  unwrapOrElse(fn: () => T): T;
+  unwrapOrElse(fn: () => T): T
 
   /**
    * Matches the Option to either a `some` or `none` branch, returning the result of the corresponding branch.
@@ -193,7 +193,7 @@ export interface Option<T> {
    * console.log(none<number>().match({ some: v => v, none: () => 0 })); // 0
    * ```
    */
-  match<U>(branches: { some: (value: T) => U; none: () => U }): U;
+  match<U>(branches: { some: (value: T) => U; none: () => U }): U
 
   /**
    * Converts the Option to a Result, using the provided error value for `None`.
@@ -209,7 +209,7 @@ export interface Option<T> {
    * console.log(none<string>().toResult('failed').unwrapOr('')); // ''
    * ```
    */
-  toResult<E>(error: E): Result<T, E>;
+  toResult<E>(error: E): Result<T, E>
 
   /**
    * Converts the Option to an asynchronous OptionAsync.
@@ -223,7 +223,7 @@ export interface Option<T> {
    * console.log(await none<string>().toAsync().unwrapOr('')); // ''
    * ```
    */
-  toAsync(): OptionAsync<T>;
+  toAsync(): OptionAsync<T>
 
   /**
    * Converts the value to an array, wrapping it in an array if it’s not already one.
@@ -237,7 +237,7 @@ export interface Option<T> {
    * console.log(none<number>().sequence().unwrapOr([])); // []
    * ```
    */
-  sequence(): Option<T[]>;
+  sequence(): Option<T[]>
 
   /**
    * Executes a side-effect function on the contained value if `Some`, then returns the original Option.
@@ -252,7 +252,7 @@ export interface Option<T> {
    * none<string>().tap(console.log); // No output
    * ```
    */
-  tap(fn: (value: T) => void): Option<T>;
+  tap(fn: (value: T) => void): Option<T>
 }
 
 /**
@@ -272,7 +272,7 @@ export interface OptionAsync<T> {
    * console.log(await OptionAsync.none<string>().isSome()); // false
    * ```
    */
-  isSome(): Promise<boolean>;
+  isSome(): Promise<boolean>
 
   /**
    * Checks if the OptionAsync is empty (`None`).
@@ -285,7 +285,7 @@ export interface OptionAsync<T> {
    * console.log(await OptionAsync.none<number>().isNone()); // true
    * ```
    */
-  isNone(): Promise<boolean>;
+  isNone(): Promise<boolean>
 
   /**
    * Checks if the OptionAsync contains a specific value.
@@ -300,7 +300,7 @@ export interface OptionAsync<T> {
    * console.log(await OptionAsync.none<string>().contains('test')); // false
    * ```
    */
-  contains(value: T): Promise<boolean>;
+  contains(value: T): Promise<boolean>
 
   /**
    * Transforms the contained value using an asynchronous function, returning a new OptionAsync.
@@ -317,7 +317,7 @@ export interface OptionAsync<T> {
    * console.log(await (await OptionAsync.none<number>().map(async n => n * 2)).unwrapOr(0)); // 0
    * ```
    */
-  map<U>(fn: (value: T) => MaybePromise<U>): Promise<Option<U>>;
+  map<U>(fn: (value: T) => MaybePromise<U>): Promise<Option<U>>
 
   /**
    * Chains the OptionAsync with a function that returns another Option or OptionAsync.
@@ -334,7 +334,7 @@ export interface OptionAsync<T> {
    * console.log(await (await OptionAsync.none<string>().andThen(s => some(s))).unwrapOr('')); // ''
    * ```
    */
-  andThen<U>(fn: (value: T) => OptionLike<U>): Promise<Option<U>>;
+  andThen<U>(fn: (value: T) => OptionLike<U>): Promise<Option<U>>
 
   /**
    * Filters the OptionAsync based on an asynchronous predicate. If the predicate returns `false` or the OptionAsync is `None`, returns `None`.
@@ -350,7 +350,7 @@ export interface OptionAsync<T> {
    * console.log((await OptionAsync.none<number>().filter(async n => n > 5)).unwrapOr(0)); // 0
    * ```
    */
-  filter(predicate: (value: T) => MaybePromise<boolean>): Promise<Option<T>>;
+  filter(predicate: (value: T) => MaybePromise<boolean>): Promise<Option<T>>
 
   /**
    * Combines this OptionAsync with another Option or OptionAsync, returning an Option containing a tuple of both values if both are `Some`.
@@ -368,7 +368,7 @@ export interface OptionAsync<T> {
    * console.log((await opt1.zip(OptionAsync.none<number>())).unwrapOr(['', 0])); // ['', 0]
    * ```
    */
-  zip<U>(other: OptionLike<U>): Promise<Option<[T, U]>>;
+  zip<U>(other: OptionLike<U>): Promise<Option<[T, U]>>
 
   /**
    * Unwraps a nested OptionAsync, returning the inner Option if `Some`, or `None` if the value is not an Option.
@@ -383,7 +383,7 @@ export interface OptionAsync<T> {
    * console.log((await OptionAsync.none<number>().flatten()).unwrapOr(0)); // 0
    * ```
    */
-  flatten(): Promise<Option<Unwrap<T>>>;
+  flatten(): Promise<Option<Unwrap<T>>>
 
   /**
    * Returns this OptionAsync if `Some`, otherwise evaluates the provided function to return an alternative Option or OptionAsync.
@@ -398,7 +398,7 @@ export interface OptionAsync<T> {
    * console.log((await OptionAsync.some('value').orElse(() => some('default'))).unwrapOr('')); // 'value'
    * ```
    */
-  orElse(fn: () => OptionLike<T>): Promise<Option<T>>;
+  orElse(fn: () => OptionLike<T>): Promise<Option<T>>
 
   /**
    * Returns the contained value if `Some`, otherwise returns the provided default value.
@@ -412,7 +412,7 @@ export interface OptionAsync<T> {
    * console.log(await OptionAsync.none<string>().unwrapOr('default')); // 'default'
    * ```
    */
-  unwrapOr(defaultValue: MaybePromise<T>): Promise<T>;
+  unwrapOr(defaultValue: MaybePromise<T>): Promise<T>
 
   /**
    * Returns the contained value if `Some`, otherwise evaluates the provided function to return a default value.
@@ -426,7 +426,7 @@ export interface OptionAsync<T> {
    * console.log(await OptionAsync.some('value').unwrapOrElse(() => 'default')); // 'value'
    * ```
    */
-  unwrapOrElse(fn: () => MaybePromise<T>): Promise<T>;
+  unwrapOrElse(fn: () => MaybePromise<T>): Promise<T>
 
   /**
    * Matches the OptionAsync to either a `some` or `none` branch, returning the result of the corresponding branch.
@@ -446,9 +446,9 @@ export interface OptionAsync<T> {
    * ```
    */
   match<U>(branches: {
-    some: (value: T) => MaybePromise<U>;
-    none: () => MaybePromise<U>;
-  }): Promise<U>;
+    some: (value: T) => MaybePromise<U>
+    none: () => MaybePromise<U>
+  }): Promise<U>
 
   /**
    * Converts the OptionAsync to a ResultAsync, using the provided error value for `None`.
@@ -464,7 +464,7 @@ export interface OptionAsync<T> {
    * console.log(await (await OptionAsync.none<string>().toResult('failed')).unwrapOr('')); // ''
    * ```
    */
-  toResult<E>(error: MaybePromise<E>): Promise<ResultAsync<T, E>>;
+  toResult<E>(error: MaybePromise<E>): Promise<ResultAsync<T, E>>
 
   /**
    * Converts the value to an array, wrapping it in an array if it’s not already one.
@@ -478,7 +478,7 @@ export interface OptionAsync<T> {
    * console.log((await OptionAsync.none<number>().sequence()).unwrapOr([])); // []
    * ```
    */
-  sequence(): Promise<Option<T[]>>;
+  sequence(): Promise<Option<T[]>>
 
   /**
    * Executes an asynchronous side-effect function on the contained value if `Some`, then returns the original OptionAsync.
@@ -493,7 +493,7 @@ export interface OptionAsync<T> {
    * await OptionAsync.none<string>().tap(async (value) => console.log(value)); // No output
    * ```
    */
-  tap(fn: (value: T) => MaybePromise<void>): Promise<Option<T>>;
+  tap(fn: (value: T) => MaybePromise<void>): Promise<Option<T>>
 }
 
 /**
@@ -507,7 +507,7 @@ const NONE = new (class None implements Option<never> {
    * @returns `false`.
    */
   isSome(): boolean {
-    return false;
+    return false
   }
 
   /**
@@ -515,7 +515,7 @@ const NONE = new (class None implements Option<never> {
    * @returns `true`.
    */
   isNone(): boolean {
-    return true;
+    return true
   }
 
   /**
@@ -523,7 +523,7 @@ const NONE = new (class None implements Option<never> {
    * @returns `false`.
    */
   contains(): boolean {
-    return false;
+    return false
   }
 
   /**
@@ -532,7 +532,7 @@ const NONE = new (class None implements Option<never> {
    * @returns An `Option<U>` that is `None`.
    */
   map<U>(): Option<U> {
-    return NONE as Option<U>;
+    return NONE as Option<U>
   }
 
   /**
@@ -541,7 +541,7 @@ const NONE = new (class None implements Option<never> {
    * @returns An `Option<U>` that is `None`.
    */
   andThen<U>(): Option<U> {
-    return NONE as Option<U>;
+    return NONE as Option<U>
   }
 
   /**
@@ -549,7 +549,7 @@ const NONE = new (class None implements Option<never> {
    * @returns This `None` Option.
    */
   filter(): Option<never> {
-    return this;
+    return this
   }
 
   /**
@@ -558,7 +558,7 @@ const NONE = new (class None implements Option<never> {
    * @returns An `Option<[never, U]>` that is `None`.
    */
   zip<U>(): Option<[never, U]> {
-    return NONE as Option<[never, U]>;
+    return NONE as Option<[never, U]>
   }
 
   /**
@@ -566,7 +566,7 @@ const NONE = new (class None implements Option<never> {
    * @returns This `None` Option.
    */
   flatten(): Option<never> {
-    return this;
+    return this
   }
 
   /**
@@ -575,7 +575,7 @@ const NONE = new (class None implements Option<never> {
    * @returns The result of `fn`.
    */
   orElse<T>(fn: () => Option<T>): Option<T> {
-    return fn();
+    return fn()
   }
 
   /**
@@ -585,7 +585,7 @@ const NONE = new (class None implements Option<never> {
    * @returns The `defaultValue`.
    */
   unwrapOr<T>(defaultValue: T): T {
-    return defaultValue;
+    return defaultValue
   }
 
   /**
@@ -595,7 +595,7 @@ const NONE = new (class None implements Option<never> {
    * @returns The result of `fn`.
    */
   unwrapOrElse<T>(fn: () => T): T {
-    return fn();
+    return fn()
   }
 
   /**
@@ -605,7 +605,7 @@ const NONE = new (class None implements Option<never> {
    * @returns The result of the `none` branch.
    */
   match<U>(branches: { some: (value: never) => U; none: () => U }): U {
-    return branches.none();
+    return branches.none()
   }
 
   /**
@@ -615,7 +615,7 @@ const NONE = new (class None implements Option<never> {
    * @returns A `Result<never, E>` containing the error.
    */
   toResult<E>(error: E): Result<never, E> {
-    return err(error);
+    return err(error)
   }
 
   /**
@@ -623,7 +623,7 @@ const NONE = new (class None implements Option<never> {
    * @returns An `OptionAsync<never>` that is `None`.
    */
   toAsync(): OptionAsync<never> {
-    return OptionAsync.none();
+    return OptionAsync.none()
   }
 
   /**
@@ -631,7 +631,7 @@ const NONE = new (class None implements Option<never> {
    * @returns An `Option<never[]>` containing `[]`.
    */
   sequence(): Option<never[]> {
-    return some([]);
+    return some([])
   }
 
   /**
@@ -639,9 +639,9 @@ const NONE = new (class None implements Option<never> {
    * @returns This `None` Option.
    */
   tap(): Option<never> {
-    return this;
+    return this
   }
-})();
+})()
 
 /**
  * Type guard to check if a value is an Option.
@@ -661,7 +661,7 @@ const NONE = new (class None implements Option<never> {
  * @internal
  */
 function isOption<T>(value: any): value is Option<T> {
-  return value instanceof Some || value === NONE;
+  return value instanceof Some || value === NONE
 }
 
 /**
@@ -678,7 +678,7 @@ class Some<T> implements Option<T> {
    * @returns `true`.
    */
   isSome(): boolean {
-    return true;
+    return true
   }
 
   /**
@@ -686,7 +686,7 @@ class Some<T> implements Option<T> {
    * @returns `false`.
    */
   isNone(): boolean {
-    return false;
+    return false
   }
 
   /**
@@ -695,7 +695,7 @@ class Some<T> implements Option<T> {
    * @returns `true` if the contained value matches, `false` otherwise.
    */
   contains(value: T): boolean {
-    return this.value === value;
+    return this.value === value
   }
 
   /**
@@ -705,7 +705,7 @@ class Some<T> implements Option<T> {
    * @returns An `Option<U>` containing the transformed value.
    */
   map<U>(fn: (value: T) => U): Option<U> {
-    return some(fn(this.value));
+    return some(fn(this.value))
   }
 
   /**
@@ -715,7 +715,7 @@ class Some<T> implements Option<T> {
    * @returns The Option returned by the function.
    */
   andThen<U>(fn: (value: T) => Option<U>): Option<U> {
-    return fn(this.value);
+    return fn(this.value)
   }
 
   /**
@@ -724,7 +724,7 @@ class Some<T> implements Option<T> {
    * @returns This Option if the predicate passes, `None` otherwise.
    */
   filter(predicate: (value: T) => boolean): Option<T> {
-    return predicate(this.value) ? this : NONE;
+    return predicate(this.value) ? this : NONE
   }
 
   /**
@@ -737,7 +737,7 @@ class Some<T> implements Option<T> {
     return other.match({
       some: (otherValue) => some([this.value, otherValue]),
       none: () => NONE,
-    });
+    })
   }
 
   /**
@@ -745,7 +745,7 @@ class Some<T> implements Option<T> {
    * @returns An `Option<Unwrap<T>>` containing the unwrapped value.
    */
   flatten(): Option<Unwrap<T>> {
-    return isOption<Unwrap<T>>(this.value) ? this.value : some(this.value as Unwrap<T>);
+    return isOption<Unwrap<T>>(this.value) ? this.value : some(this.value as Unwrap<T>)
   }
 
   /**
@@ -753,7 +753,7 @@ class Some<T> implements Option<T> {
    * @returns This `Some` Option.
    */
   orElse(): Option<T> {
-    return this;
+    return this
   }
 
   /**
@@ -761,7 +761,7 @@ class Some<T> implements Option<T> {
    * @returns The contained value.
    */
   unwrapOr(): T {
-    return this.value;
+    return this.value
   }
 
   /**
@@ -769,7 +769,7 @@ class Some<T> implements Option<T> {
    * @returns The contained value.
    */
   unwrapOrElse(): T {
-    return this.value;
+    return this.value
   }
 
   /**
@@ -779,7 +779,7 @@ class Some<T> implements Option<T> {
    * @returns The result of the `some` branch.
    */
   match<U>(branches: { some: (value: T) => U; none: () => U }): U {
-    return branches.some(this.value);
+    return branches.some(this.value)
   }
 
   /**
@@ -789,7 +789,7 @@ class Some<T> implements Option<T> {
    * @returns A `Result<T, E>` containing the value.
    */
   toResult<E>(error: E): Result<T, E> {
-    return ok(this.value);
+    return ok(this.value)
   }
 
   /**
@@ -797,7 +797,7 @@ class Some<T> implements Option<T> {
    * @returns An `OptionAsync<T>` containing the value.
    */
   toAsync(): OptionAsync<T> {
-    return OptionAsync.some(this.value);
+    return OptionAsync.some(this.value)
   }
 
   /**
@@ -805,7 +805,7 @@ class Some<T> implements Option<T> {
    * @returns An `Option<T[]>` containing the value as an array.
    */
   sequence(): Option<T[]> {
-    return some(this.value instanceof Array ? this.value : [this.value]);
+    return some(this.value instanceof Array ? this.value : [this.value])
   }
 
   /**
@@ -814,8 +814,8 @@ class Some<T> implements Option<T> {
    * @returns This `Some` Option.
    */
   tap(fn: (value: T) => void): Option<T> {
-    fn(this.value);
-    return this;
+    fn(this.value)
+    return this
   }
 }
 
@@ -847,7 +847,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * ```
    */
   static some<T>(value: MaybePromise<T>): OptionAsync<T> {
-    return new OptionAsync(Promise.resolve(value).then((v) => some(v)));
+    return new OptionAsync(Promise.resolve(value).then((v) => some(v)))
   }
 
   /**
@@ -862,7 +862,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * ```
    */
   static none<T>(): OptionAsync<T> {
-    return new OptionAsync(Promise.resolve(NONE as Option<T>));
+    return new OptionAsync(Promise.resolve(NONE as Option<T>))
   }
 
   /**
@@ -882,7 +882,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * ```
    */
   static from<T>(value: MaybePromise<T | null | undefined>): OptionAsync<T> {
-    return new OptionAsync(Promise.resolve(value).then((v) => (v == null ? NONE : some(v))));
+    return new OptionAsync(Promise.resolve(value).then((v) => (v == null ? NONE : some(v))))
   }
 
   /**
@@ -907,7 +907,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
         .then(() => fn())
         .then((value) => some(value))
         .catch(() => NONE as Option<T>)
-    );
+    )
   }
 
   /**
@@ -915,7 +915,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<boolean>` resolving to `true` if `Some`, `false` if `None`.
    */
   async isSome(): Promise<boolean> {
-    return (await this.promise).isSome();
+    return (await this.promise).isSome()
   }
 
   /**
@@ -923,7 +923,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<boolean>` resolving to `true` if `None`, `false` if `Some`.
    */
   async isNone(): Promise<boolean> {
-    return (await this.promise).isNone();
+    return (await this.promise).isNone()
   }
 
   /**
@@ -932,7 +932,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<boolean>` resolving to `true` if `Some` and contains the value, `false` otherwise.
    */
   async contains(value: T): Promise<boolean> {
-    return (await this.promise).contains(value);
+    return (await this.promise).contains(value)
   }
 
   /**
@@ -942,8 +942,8 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<Option<U>>` containing the transformed value or `None`.
    */
   async map<U>(fn: (value: T) => MaybePromise<U>): Promise<Option<U>> {
-    const opt = await this.promise;
-    return opt.map((value) => Promise.resolve(fn(value))) as Option<U>;
+    const opt = await this.promise
+    return opt.map((value) => Promise.resolve(fn(value))) as Option<U>
   }
 
   /**
@@ -953,10 +953,10 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<Option<U>>` containing the result of the function or `None`.
    */
   async andThen<U>(fn: (value: T) => OptionLike<U>): Promise<Option<U>> {
-    const opt = await this.promise;
-    if (opt.isNone()) return NONE;
-    const result = await fn(opt.unwrapOr(undefined as never));
-    return result instanceof OptionAsync ? result.promise : result;
+    const opt = await this.promise
+    if (opt.isNone()) return NONE
+    const result = await fn(opt.unwrapOr(undefined as never))
+    return result instanceof OptionAsync ? result.promise : result
   }
 
   /**
@@ -965,9 +965,9 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<Option<T>>` containing the original value if the predicate passes, `None` otherwise.
    */
   async filter(predicate: (value: T) => MaybePromise<boolean>): Promise<Option<T>> {
-    const opt = await this.promise;
-    if (opt.isNone()) return NONE;
-    return (await predicate(opt.unwrapOr(undefined as never))) ? opt : NONE;
+    const opt = await this.promise
+    if (opt.isNone()) return NONE
+    return (await predicate(opt.unwrapOr(undefined as never))) ? opt : NONE
   }
 
   /**
@@ -977,9 +977,9 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<Option<[T, U]>>` containing both values or `None`.
    */
   async zip<U>(other: OptionLike<U>): Promise<Option<[T, U]>> {
-    const opt = await this.promise;
-    const otherOpt = await (other instanceof OptionAsync ? other.promise : other);
-    return opt.zip(otherOpt);
+    const opt = await this.promise
+    const otherOpt = await (other instanceof OptionAsync ? other.promise : other)
+    return opt.zip(otherOpt)
   }
 
   /**
@@ -987,8 +987,8 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<Option<Unwrap<T>>>` containing the unwrapped value.
    */
   async flatten(): Promise<Option<Unwrap<T>>> {
-    const opt = await this.promise;
-    return opt.flatten();
+    const opt = await this.promise
+    return opt.flatten()
   }
 
   /**
@@ -997,10 +997,10 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<Option<T>>` containing this value if `Some`, or the result of `fn` if `None`.
    */
   async orElse(fn: () => OptionLike<T>): Promise<Option<T>> {
-    const opt = await this.promise;
-    if (opt.isSome()) return opt;
-    const result = await fn();
-    return result instanceof OptionAsync ? result.promise : result;
+    const opt = await this.promise
+    if (opt.isSome()) return opt
+    const result = await fn()
+    return result instanceof OptionAsync ? result.promise : result
   }
 
   /**
@@ -1009,7 +1009,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<T>` containing the value or the default value.
    */
   async unwrapOr(defaultValue: MaybePromise<T>): Promise<T> {
-    return (await this.promise).unwrapOr(await Promise.resolve(defaultValue));
+    return (await this.promise).unwrapOr(await Promise.resolve(defaultValue))
   }
 
   /**
@@ -1018,7 +1018,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<T>` containing the value or the result of `fn`.
    */
   async unwrapOrElse(fn: () => MaybePromise<T>): Promise<T> {
-    return (await this.promise).unwrapOrElse(() => Promise.resolve(fn()) as T);
+    return (await this.promise).unwrapOrElse(() => Promise.resolve(fn()) as T)
   }
 
   /**
@@ -1028,14 +1028,14 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<U>` containing the result of the `some` or `none` branch.
    */
   async match<U>(branches: {
-    some: (value: T) => MaybePromise<U>;
-    none: () => MaybePromise<U>;
+    some: (value: T) => MaybePromise<U>
+    none: () => MaybePromise<U>
   }): Promise<U> {
-    const opt = await this.promise;
+    const opt = await this.promise
     return opt.match({
       some: (value) => Promise.resolve(branches.some(value)) as U,
       none: () => Promise.resolve(branches.none()) as U,
-    });
+    })
   }
 
   /**
@@ -1045,8 +1045,8 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<ResultAsync<T, E>>` containing the value or the error.
    */
   async toResult<E>(error: MaybePromise<E>): Promise<ResultAsync<T, E>> {
-    const opt = await this.promise;
-    return new ResultAsync(Promise.resolve(opt.toResult(await error)));
+    const opt = await this.promise
+    return new ResultAsync(Promise.resolve(opt.toResult(await error)))
   }
 
   /**
@@ -1054,7 +1054,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<Option<T[]>>` containing the value as an array or an empty array for `None`.
    */
   async sequence(): Promise<Option<T[]>> {
-    return (await this.promise).sequence();
+    return (await this.promise).sequence()
   }
 
   /**
@@ -1063,9 +1063,9 @@ export class OptionAsync<T> implements OptionAsync<T> {
    * @returns A `Promise<Option<T>>` containing the original value.
    */
   async tap(fn: (value: T) => MaybePromise<void>): Promise<Option<T>> {
-    const opt = await this.promise;
-    if (opt.isSome()) await fn(opt.unwrapOr(undefined as never));
-    return opt;
+    const opt = await this.promise
+    if (opt.isSome()) await fn(opt.unwrapOr(undefined as never))
+    return opt
   }
 }
 
@@ -1083,7 +1083,7 @@ export class OptionAsync<T> implements OptionAsync<T> {
  * ```
  */
 export function some<T>(value: T): Option<T> {
-  return new Some(value);
+  return new Some(value)
 }
 
 /**
@@ -1099,7 +1099,7 @@ export function some<T>(value: T): Option<T> {
  * ```
  */
 export function none<T>(): Option<T> {
-  return NONE as Option<T>;
+  return NONE as Option<T>
 }
 
 /**
@@ -1119,7 +1119,7 @@ export function none<T>(): Option<T> {
  * ```
  */
 export function from<T>(value: T | null | undefined): Option<T> {
-  return value == null ? NONE : some(value);
+  return value == null ? NONE : some(value)
 }
 
 /**
@@ -1140,9 +1140,9 @@ export function from<T>(value: T | null | undefined): Option<T> {
  */
 export function tryOption<T, E>(fn: () => T, onError?: (e: unknown) => E): Option<T> {
   try {
-    return some(fn());
+    return some(fn())
   } catch (e) {
-    if (onError) onError(e);
-    return NONE;
+    if (onError) onError(e)
+    return NONE
   }
 }
