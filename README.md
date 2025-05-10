@@ -1,6 +1,6 @@
 # neverever
 
-`neverever` is a zero-dependency TypeScript library for safe handling of data in TypeScript. It provides enhanced `Option<T>` and `Result<T, E>` types for handling optional values and success/error outcomes, just like the `neverthrow` library with additional chainable methods and utilities. The library supports both synchronous and asynchronous workflows, making it ideal for robust error handling and data transformation.
+`neverever` is a zero-dependency TypeScript library for safe and expressive data handling. It provides enhanced `Option<T>` and `Result<T, E>` types, inspired by functional programming, for managing optional values and success/error outcomes. With support for both synchronous and asynchronous workflows, chainable methods, and utility functions, it’s a robust alternative to libraries like `neverthrow`. Use it to eliminate null checks, simplify error handling, and streamline data transformations.
 
 ## Installation
 
@@ -10,7 +10,7 @@ Install `neverever` via (p)npm:
 npm install neverever
 ```
 
-Ensure you have TypeScript installed and configured in your project. Add the following to your `tsconfig.json` for optimal compatibility:
+Ensure TypeScript is installed and configured. Add the following to your `tsconfig.json` for optimal compatibility:
 
 ```json
 {
@@ -33,27 +33,27 @@ import { ok, some, pipe } from 'neverever';
 
 ### Option and OptionAsync
 
-The `Option<T>` type represents a value that may or may not be present:
+`Option<T>` represents a value that may or may not exist:
 - `Some<T>`: Contains a value of type `T`.
 - `None`: Represents the absence of a value.
 
-`OptionAsync<T>` extends this for asynchronous values, wrapping a `Promise<Option<T>>`. Use these to safely handle nullable or undefined values without explicit null checks.
+`OptionAsync<T>` extends this for asynchronous operations, wrapping a `Promise<Option<T>>`. Use these to safely handle nullable or undefined values without explicit checks.
 
 ### Result and ResultAsync
 
-The `Result<T, E>` type represents a computation that may succeed or fail:
+`Result<T, E>` represents a computation that may succeed or fail:
 - `Ok<T>`: Contains a successful value of type `T`.
 - `Err<E>`: Contains an error of type `E`.
 
-`ResultAsync<T, E>` extends this for asynchronous computations, wrapping a `Promise<Result<T, E>>`. Use these for robust error handling without try-catch blocks.
+`ResultAsync<T, E>` handles asynchronous computations, wrapping a `Promise<Result<T, E>>`. These are ideal for robust error handling without try-catch blocks.
 
 ### Pipe Utility
 
-The `pipe` function composes functions in a pipeline, supporting both synchronous and asynchronous operations. It’s ideal for chaining transformations with `Option` and `Result` types.
+The `pipe` function composes functions in a pipeline, supporting both synchronous and asynchronous operations. It’s perfect for chaining transformations with `Option` and `Result` types.
 
 ## Usage
 
-Below are detailed examples for each component of `neverever`. All examples are written in TypeScript and assume the package is imported as `neverever`.
+Below are detailed examples for each component. All examples assume `neverever` is imported.
 
 ### Option
 
@@ -62,7 +62,7 @@ Below are detailed examples for each component of `neverever`. All examples are 
 #### Creating Options
 
 ```typescript
-import { some, none, from } from 'neverever';
+import { some, none, from, tryOption } from 'neverever';
 
 // Create a Some value
 const opt1 = some(42);
@@ -75,6 +75,10 @@ console.log(opt2.unwrapOr('default')); // 'default'
 // Create from nullable value
 const opt3 = from(null);
 console.log(opt3.unwrapOr('value')); // 'value'
+
+// Create from a potentially throwing function
+const opt4 = tryOption(() => JSON.parse('{"key": "value"}').key, console.error);
+console.log(opt4.unwrapOr('')); // 'value'
 ```
 
 #### Transforming Options
@@ -86,11 +90,14 @@ const opt = some(5);
 const mapped = opt.map(n => n * 2);
 console.log(mapped.unwrapOr(0)); // 10
 
-const chained = opt.andThen(n => some(n + 10));
+const chained = opt.andThen(n => n > 0 ? some(n + 10) : none());
 console.log(chained.unwrapOr(0)); // 15
+
+const filtered = opt.filter(n => n > 0);
+console.log(filtered.unwrapOr(0)); // 5
 ```
 
-#### Combining Options
+#### Combining and Flattening Options
 
 ```typescript
 import { some, none } from 'neverever';
@@ -100,8 +107,11 @@ const opt2 = some(42);
 const zipped = opt1.zip(opt2);
 console.log(zipped.unwrapOr(['', 0])); // ['hello', 42]
 
-const zippedWithNone = opt1.zip(none<number>());
-console.log(zippedWithNone.unwrapOr(['', 0])); // ['', 0]
+const nested = some(some(42));
+console.log(nested.flatten().unwrapOr(0)); // 42
+
+const sequenced = opt1.sequence();
+console.log(sequenced.unwrapOr([])); // ['hello']
 ```
 
 #### Pattern Matching
@@ -129,7 +139,7 @@ console.log(none<number>().match({ some: v => v, none: () => 0 })); // 0
 import { OptionAsync } from 'neverever';
 
 // Create a Some value
-const opt1 = OptionAsync.some('hello');
+const opt1 = OptionAsync.some(Promise.resolve('hello'));
 console.log(await opt1.unwrapOr('')); // 'hello'
 
 // Create a None value
@@ -139,6 +149,10 @@ console.log(await opt2.unwrapOr('default')); // 'default'
 // Create from Promise
 const opt3 = OptionAsync.from(Promise.resolve('async'));
 console.log(await opt3.unwrapOr('')); // 'async'
+
+// Create from a throwing async function
+const opt4 = OptionAsync.try(async () => (await fetch('https://api.example.com')).json());
+console.log(await opt4.unwrapOr({})); // JSON or {}
 ```
 
 #### Transforming OptionAsync
@@ -150,8 +164,11 @@ const opt = OptionAsync.some(5);
 const mapped = await opt.map(async n => n * 2);
 console.log(mapped.unwrapOr(0)); // 10
 
-const chained = await opt.andThen(n => some(n + 10));
+const chained = await opt.andThen(async n => n > 0 ? some(n + 10) : none());
 console.log(chained.unwrapOr(0)); // 15
+
+const filtered = await opt.filter(async n => n > 0);
+console.log(filtered.unwrapOr(0)); // 5
 ```
 
 #### Combining OptionAsync
@@ -175,7 +192,7 @@ console.log(asyncZipped.unwrapOr(['', 0])); // ['hello', 100]
 #### Creating Results
 
 ```typescript
-import { ok, err, tryCatch } from 'neverever';
+import { ok, err, fromThrowable } from 'neverever';
 
 // Create an Ok value
 const result1 = ok<string, string>('success');
@@ -186,14 +203,11 @@ const result2 = err<string, string>('failed');
 console.log(result2.unwrapOr('default')); // 'default'
 
 // Create from a function
-const result3 = tryCatch(
-  () => {
-    if (Math.random() > 0.5) throw new Error('Failed');
-    return 'success';
-  },
+const result3 = fromThrowable(
+  () => JSON.parse('{"key": "value"}').key,
   e => (e instanceof Error ? e.message : 'Unknown error')
 );
-console.log(result3.unwrapOr('')); // 'success' or ''
+console.log(result3.unwrapOr('')); // 'value'
 ```
 
 #### Transforming Results
@@ -202,6 +216,9 @@ console.log(result3.unwrapOr('')); // 'success' or ''
 import { ok } from 'neverever';
 
 const result = ok<number, string>(10);
+const mapped = result.map(n => n * 2);
+console.log(mapped.unwrapOr(0)); // 20
+
 const filtered = result.filter(n => n > 5, 'Too small');
 console.log(filtered.unwrapOr(0)); // 10
 
@@ -229,10 +246,10 @@ console.log(result1.zip(err<number, string>('failed')).unwrapOr(['', 0])); // ['
 #### Creating ResultAsync
 
 ```typescript
-import { okAsync, errAsync, tryCatch } from 'neverever';
+import { okAsync, errAsync, fromAsyncThrowable } from 'neverever';
 
 // Create an Ok value
-const result1 = okAsync<string, string>('success');
+const result1 = okAsync<string, string>(Promise.resolve('success'));
 console.log(await result1.unwrapOr('')); // 'success'
 
 // Create an Err value
@@ -240,14 +257,11 @@ const result2 = errAsync<string, string>('failed');
 console.log(await result2.unwrapOr('default')); // 'default'
 
 // Create from an async function
-const result3 = tryCatch(
-  async () => {
-    await new Promise(resolve => setTimeout(resolve, 100));
-    return 'async';
-  },
-  e => 'Async error'
+const result3 = fromAsyncThrowable(
+  async () => (await fetch('https://api.example.com')).json(),
+  e => 'Fetch error'
 );
-console.log(await result3.unwrapOr('')); // 'async' or ''
+console.log(await result3.unwrapOr({})); // JSON or {}
 ```
 
 #### Transforming ResultAsync
@@ -256,6 +270,9 @@ console.log(await result3.unwrapOr('')); // 'async' or ''
 import { okAsync } from 'neverever';
 
 const result = okAsync<number, string>(10);
+const mapped = await result.map(async n => n * 2);
+console.log(await mapped.unwrapOr(0)); // 20
+
 const filtered = await result.filter(async n => n > 5, 'Too small');
 console.log(await filtered.unwrapOr(0)); // 10
 
@@ -279,7 +296,7 @@ console.log(await asyncZipped.unwrapOr(['', 0])); // ['hello', 100]
 
 ### Pipe Utility
 
-The `pipe` function composes functions in a pipeline, supporting both synchronous and asynchronous operations.
+The `pipe` function composes functions in a pipeline, handling both synchronous and asynchronous operations.
 
 #### Synchronous Pipeline
 
@@ -335,11 +352,11 @@ console.log(await (await result).unwrapOr('')); // 'DATA!'
 
 ### Type Utilities
 
-`neverever` provides utility types to enhance type safety and flexibility.
+`neverever` provides utility types for enhanced type safety.
 
 #### Unwrap
 
-Extracts the inner type of a Promise, Option, or Result.
+Extracts the inner type of a `Promise`, `Option`, or `Result`.
 
 ```typescript
 import { Unwrap, ok, some } from 'neverever';
@@ -354,7 +371,7 @@ console.log(value); // 42
 
 #### MaybePromise
 
-Represents a value that may be synchronous or a Promise.
+Represents a value that may be synchronous or a `Promise`.
 
 ```typescript
 import { MaybePromise, OptionAsync } from 'neverever';
@@ -368,7 +385,7 @@ console.log(await processValue(Promise.resolve('world')).unwrapOr('')); // 'worl
 
 #### OptionLike and ResultLike
 
-Allow functions to accept Options or Results, including their async variants.
+Allow functions to accept `Option` or `Result`, including their async variants or promises.
 
 ```typescript
 import { OptionLike, ResultLike, some, ok } from 'neverever';
@@ -388,13 +405,13 @@ console.log(await processResult(ok<string, string>('data'))); // 'data'
 
 ## API Reference
 
-For detailed documentation, generate API docs using `typedoc`:
+Generate detailed API documentation using `typedoc`:
 
 ```bash
 npx typedoc --entryPoints src --out docs
 ```
 
-This will create HTML documentation from the JSDoc comments in the source files.
+This creates HTML documentation from JSDoc comments in the source files.
 
 ## Contributing
 
@@ -402,9 +419,11 @@ Contributions are welcome! To contribute:
 
 1. Fork the repository.
 2. Create a new branch (`git checkout -b feature/your-feature`).
-3. Make your changes and commit (`git commit -m 'Add your feature'`).
+3. Make changes and commit (`git commit -m 'Add your feature'`).
 4. Push to the branch (`git push origin feature/your-feature`).
 5. Open a pull request.
+
+Please ensure tests pass and add new tests for features or bug fixes.
 
 ## License
 
