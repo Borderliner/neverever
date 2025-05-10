@@ -1,642 +1,484 @@
-import {
-  Result as NeverthrowResult,
-  ResultAsync as NeverthrowResultAsync,
-  ok,
-  err,
-  Ok,
-  Err,
-  okAsync,
-} from 'neverthrow'
+// result.ts
 import { Option, OptionAsync, some, none } from './option'
 import { Unwrap, MaybePromise } from './types'
 
-/**
- * Type guard to check if a value is a Promise.
- * @template T The type of the value contained in the Promise.
- * @param value The value to check.
- * @returns `true` if the value is a `Promise<T>`, `false` otherwise.
- * @example
- * ```typescript
- * import { tryCatch } from 'neverever';
- * function isAsync(value: any): boolean {
- *   return value instanceof Promise;
- * }
- * console.log(isAsync(Promise.resolve(42))); // true
- * console.log(isAsync(42)); // false
- * ```
- * @internal
- */
-function isPromise<T>(value: any): value is Promise<T> {
-  return value instanceof Promise
-}
-
-/**
- * Represents a synchronous result of a computation that may either succeed with a value (`Ok`) or fail with an error (`Err`).
- * Extends `neverthrow`'s `Result` with additional chainable methods for functional programming.
- * @template T The type of the value in case of success.
- * @template E The type of the error in case of failure.
- */
 interface Result<T, E> {
-  /**
-   * Converts the Result to an Option, discarding the error if `Err`.
-   * @returns An `Option<T>` containing the value if `Ok`, or `None` if `Err`.
-   * @example
-   * ```typescript
-   * import { ok, err } from 'neverever';
-   * const result = ok<string, string>('success');
-   * const opt = result.toOption();
-   * console.log(opt.unwrapOr('')); // 'success'
-   * console.log(err<string, string>('failed').toOption().unwrapOr('')); // ''
-   * ```
-   */
+  isOk(): boolean
+  isErr(): boolean
+  map<U>(fn: (value: T) => U): Result<U, E>
+  mapErr<F>(fn: (error: E) => F): Result<T, F>
+  andThen<U, F>(fn: (value: T) => Result<U, F>): Result<U, E | F>
+  orElse<F>(fn: (error: E) => Result<T, F>): Result<T, E | F>
+  unwrapOr(defaultValue: T): T
+  unwrapOrElse(fn: (error: E) => T): T
+  match<U>(branches: { ok: (value: T) => U; err: (error: E) => U }): U
   toOption(): Option<T>
-
-  /**
-   * Filters the Result based on a predicate. If the predicate returns `false` or the Result is `Err`, returns an `Err` with the provided error.
-   * @param predicate A function to test the value.
-   * @param error The error to return if the predicate fails.
-   * @returns A `Result<T, E>` containing the value if the predicate passes, or the provided error.
-   * @example
-   * ```typescript
-   * import { ok, err } from 'neverever';
-   * const result = ok<number, string>(10);
-   * const filtered = result.filter(n => n > 5, 'Too small');
-   * console.log(filtered.unwrapOr(0)); // 10
-   * console.log(result.filter(n => n > 15, 'Too small').unwrapOr(0)); // 0
-   * console.log(err<number, string>('failed').filter(n => n > 5, 'Too small').unwrapOr(0)); // 0
-   * ```
-   */
   filter(predicate: (value: T) => boolean, error: E): Result<T, E>
-
-  /**
-   * Combines this Result with another synchronous Result, returning a Result containing a tuple of both values if both are `Ok`.
-   * If either Result is `Err`, returns the first `Err` encountered.
-   * @template U The type of the value in the other Result.
-   * @template F The type of the error in the other Result.
-   * @param other The other Result to combine with.
-   * @returns A `Result<[T, U], E | F>` containing both values or the first error.
-   * @example
-   * ```typescript
-   * import { ok, err } from 'neverever';
-   * const result1 = ok<string, string>('hello');
-   * const result2 = ok<number, string>(42);
-   * const zipped = result1.zip(result2);
-   * console.log(zipped.unwrapOr(['', 0])); // ['hello', 42]
-   * console.log(result1.zip(err<number, string>('failed')).unwrapOr(['', 0])); // ['', 0]
-   * ```
-   */
-  zip<U, F>(other: NeverthrowResult<U, F>): Result<[T, U], E | F>
-
-  /**
-   * Unwraps a nested Result, returning the inner Result if `Ok`, or the original error if `Err`.
-   * @returns A `Result<Unwrap<T>, E>` containing the unwrapped value or the error.
-   * @example
-   * ```typescript
-   * import { ok, err } from 'neverever';
-   * const nested = ok<Result<number, string>, string>(ok(42));
-   * const flat = nested.flatten();
-   * console.log(flat.unwrapOr(0)); // 42
-   * console.log(ok(42).flatten().unwrapOr(0)); // 42
-   * console.log(err<number, string>('failed').flatten().unwrapOr(0)); // 0
-   * ```
-   */
+  zip<U, F>(other: Result<U, F>): Result<[T, U], E | F>
   flatten(): Result<Unwrap<T>, E>
-
-  /**
-   * Checks if the Result contains a specific value.
-   * @param value The value to compare against.
-   * @returns `true` if the Result is `Ok` and contains the given value, `false` otherwise.
-   * @example
-   * ```typescript
-   * import { ok, err } from 'neverever';
-   * const result = ok('world');
-   * console.log(result.contains('world')); // true
-   * console.log(result.contains('hello')); // false
-   * console.log(err<string, string>('failed').contains('world')); // false
-   * ```
-   */
   contains(value: T): boolean
-
-  /**
-   * Recovers from an error by providing a new value if the Result is `Err`.
-   * @param fn A function that takes the error and returns a new value.
-   * @returns A `Result<T, E>` containing the original value if `Ok`, or the recovered value if `Err`.
-   * @example
-   * ```typescript
-   * import { ok, err } from 'neverever';
-   * const result = err<string, string>('failed');
-   * const recovered = result.recover(e => `recovered from ${e}`);
-   * console.log(recovered.unwrapOr('')); // 'recovered from failed'
-   * console.log(ok<string, string>('success').recover(e => 'recovered').unwrapOr('')); // 'success'
-   * ```
-   */
   recover(fn: (error: E) => T): Result<T, E>
-
-  /**
-   * Converts the value to an array, wrapping it in an array if it’s not already one.
-   * @returns A `Result<T[], E>` containing the value as an array or the original error.
-   * @example
-   * ```typescript
-   * import { ok, err } from 'neverever';
-   * const result = ok(42);
-   * console.log(result.sequence().unwrapOr([])); // [42]
-   * console.log(ok([1, 2]).sequence().unwrapOr([])); // [1, 2]
-   * console.log(err<number, string>('failed').sequence().unwrapOr([])); // []
-   * ```
-   */
   sequence(): Result<T[], E>
-
-  /**
-   * Executes a side-effect function on the value if `Ok`, then returns the original Result.
-   * @param fn A function to execute with the value.
-   * @returns The original `Result<T, E>`.
-   * @example
-   * ```typescript
-   * import { ok, err } from 'neverever';
-   * const result = ok('hello');
-   * result.tap(console.log); // Prints: 'hello'
-   * console.log(result.unwrapOr('')); // 'hello'
-   * err<string, string>('failed').tap(console.log); // No output
-   * ```
-   */
   tap(fn: (value: T) => void): Result<T, E>
-
-  /**
-   * Returns the underlying `neverthrow` Result, allowing access to native `neverthrow` methods.
-   * @returns The underlying `NeverthrowResult<T, E>`.
-   * @example
-   * ```typescript
-   * import { ok } from 'neverever';
-   * const result = ok<string, string>('hello');
-   * const raw = result.unwrap();
-   * console.log(raw.isOk()); // true
-   * console.log(raw.value); // 'hello'
-   * ```
-   */
-  unwrap(): NeverthrowResult<T, E>
+  tapErr(fn: (error: E) => void): Result<T, E>
+  toAsync(): ResultAsync<T, E>
 }
 
-/**
- * Represents an asynchronous result of a computation that may either succeed with a value (`Ok`) or fail with an error (`Err`).
- * Extends `neverthrow`'s `ResultAsync` with additional chainable methods for functional programming.
- * @template T The type of the value in case of success.
- * @template E The type of the error in case of failure.
- */
 interface ResultAsync<T, E> {
-  /**
-   * Converts the ResultAsync to an OptionAsync, discarding the error if `Err`.
-   * @returns An `OptionAsync<T>` containing the value if `Ok`, or `None` if `Err`.
-   * @example
-   * ```typescript
-   * import { okAsync, errAsync } from 'neverever';
-   * const result = okAsync<string, string>('success');
-   * const opt = await result.toOption();
-   * console.log(await opt.unwrapOr('')); // 'success'
-   * console.log(await (await errAsync<string, string>('failed').toOption()).unwrapOr('')); // ''
-   * ```
-   */
+  isOk(): Promise<boolean>
+  isErr(): Promise<boolean>
+  map<U>(fn: (value: T) => MaybePromise<U>): ResultAsync<U, E>
+  mapErr<F>(fn: (error: E) => MaybePromise<F>): ResultAsync<T, F>
+  andThen<U, F>(fn: (value: T) => Result<U, F> | ResultAsync<U, F>): ResultAsync<U, E | F>
+  orElse<F>(fn: (error: E) => Result<T, F> | ResultAsync<T, F>): ResultAsync<T, E | F>
+  unwrapOr(defaultValue: MaybePromise<T>): Promise<T>
+  unwrapOrElse(fn: (error: E) => MaybePromise<T>): Promise<T>
+  match<U>(branches: { ok: (value: T) => MaybePromise<U>; err: (error: E) => MaybePromise<U> }): Promise<U>
   toOption(): OptionAsync<T>
-
-  /**
-   * Filters the ResultAsync based on an asynchronous predicate. If the predicate returns `false` or the ResultAsync is `Err`, returns an `Err` with the provided error.
-   * @param predicate A function to test the value, which may return a Promise.
-   * @param error The error to return if the predicate fails, which may be a Promise.
-   * @returns A `ResultAsync<T, E>` containing the value if the predicate passes, or the provided error.
-   * @example
-   * ```typescript
-   * import { okAsync, errAsync } from 'neverever';
-   * const result = okAsync<number, string>(10);
-   * const filtered = await result.filter(async n => n > 5, 'Too small');
-   * console.log(await filtered.unwrapOr(0)); // 10
-   * console.log(await (await result.filter(async n => n > 15, 'Too small')).unwrapOr(0)); // 0
-   * console.log(await (await errAsync<number, string>('failed').filter(async n => n > 5, 'Too small')).unwrapOr(0)); // 0
-   * ```
-   */
   filter(predicate: (value: T) => MaybePromise<boolean>, error: MaybePromise<E>): ResultAsync<T, E>
-
-  /**
-   * Combines this ResultAsync with another Result or ResultAsync, returning a ResultAsync containing a tuple of both values if both are `Ok`.
-   * If either is `Err`, returns the first `Err` encountered.
-   * @template U The type of the value in the other Result or ResultAsync.
-   * @template F The type of the error in the other Result or ResultAsync.
-   * @param other The other Result or ResultAsync to combine with.
-   * @returns A `ResultAsync<[T, U], E | F>` containing both values or the first error.
-   * @example
-   * ```typescript
-   * import { okAsync, ok, errAsync } from 'neverever';
-   * const result1 = okAsync<string, string>('hello');
-   * const result2 = ok<number, string>(42);
-   * const zipped = await result1.zip(result2);
-   * console.log(await zipped.unwrapOr(['', 0])); // ['hello', 42]
-   * console.log(await result1.zip(errAsync<number, string>('failed')).unwrapOr(['', 0])); // ['', 0]
-   * ```
-   */
-  zip<U, F>(other: NeverthrowResult<U, F> | NeverthrowResultAsync<U, F>): ResultAsync<[T, U], E | F>
-
-  /**
-   * Unwraps a nested ResultAsync, returning the inner ResultAsync if `Ok`, or the original error if `Err`.
-   * @returns A `ResultAsync<Unwrap<T>, E>` containing the unwrapped value or the error.
-   * @example
-   * ```typescript
-   * import { okAsync, errAsync } from 'neverever';
-   * const nested = okAsync<ResultAsync<number, string>, string>(okAsync(42));
-   * const flat = await nested.flatten();
-   * console.log(await flat.unwrapOr(0)); // 42
-   * console.log(await okAsync(42).flatten().unwrapOr(0)); // 42
-   * console.log(await errAsync<number, string>('failed').flatten().unwrapOr(0)); // 0
-   * ```
-   */
+  zip<U, F>(other: Result<U, F> | ResultAsync<U, F>): ResultAsync<[T, U], E | F>
   flatten(): ResultAsync<Unwrap<T>, E>
-
-  /**
-   * Checks if the ResultAsync contains a specific value.
-   * @param value The value to compare against.
-   * @returns A `Promise<boolean>` resolving to `true` if `Ok` and contains the value, `false` otherwise.
-   * @example
-   * ```typescript
-   * import { okAsync, errAsync } from 'neverever';
-   * const result = okAsync('world');
-   * console.log(await result.contains('world')); // true
-   * console.log(await result.contains('hello')); // false
-   * console.log(await errAsync<string, string>('failed').contains('world')); // false
-   * ```
-   */
   contains(value: T): Promise<boolean>
-
-  /**
-   * Recovers from an error by providing a new value if the ResultAsync is `Err`.
-   * @param fn A function that takes the error and returns a new value, which may be a Promise.
-   * @returns A `ResultAsync<T, E>` containing the original value if `Ok`, or the recovered value if `Err`.
-   * @example
-   * ```typescript
-   * import { okAsync, errAsync } from 'neverever';
-   * const result = errAsync<string, string>('failed');
-   * const recovered = await result.recover(async e => `recovered from ${e}`);
-   * console.log(await recovered.unwrapOr('')); // 'recovered from failed'
-   * console.log(await okAsync<string, string>('success').recover(async e => 'recovered').unwrapOr('')); // 'success'
-   * ```
-   */
   recover(fn: (error: E) => MaybePromise<T>): ResultAsync<T, E>
-
-  /**
-   * Converts the value to an array, wrapping it in an array if it’s not already one.
-   * @returns A `ResultAsync<T[], E>` containing the value as an array or the original error.
-   * @example
-   * ```typescript
-   * import { okAsync, errAsync } from 'neverever';
-   * const result = okAsync(42);
-   * console.log(await (await result.sequence()).unwrapOr([])); // [42]
-   * console.log(await (await okAsync([1, 2]).sequence()).unwrapOr([])); // [1, 2]
-   * console.log(await (await errAsync<number, string>('failed').sequence()).unwrapOr([])); // []
-   * ```
-   */
   sequence(): ResultAsync<T[], E>
-
-  /**
-   * Executes an asynchronous side-effect function on the value if `Ok`, then returns the original ResultAsync.
-   * @param fn A function to execute with the value, which may return a Promise.
-   * @returns The original `ResultAsync<T, E>`.
-   * @example
-   * ```typescript
-   * import { okAsync, errAsync } from 'neverever';
-   * const result = okAsync('hello');
-   * await result.tap(async (value) => console.log(value)); // Prints: 'hello'
-   * console.log(await result.unwrapOr('')); // 'hello'
-   * await errAsync<string, string>('failed').tap(async (value) => console.log(value)); // No output
-   * ```
-   */
   tap(fn: (value: T) => MaybePromise<void>): ResultAsync<T, E>
-
-  /**
-   * Returns the underlying `neverthrow` ResultAsync, allowing access to native `neverthrow` methods.
-   * @returns The underlying `NeverthrowResultAsync<T, E>`.
-   * @example
-   * ```typescript
-   * import { okAsync } from 'neverever';
-   * const result = okAsync<string, string>('hello');
-   * const raw = result.unwrap();
-   * console.log(await raw.isOk()); // true
-   * console.log(await raw.value); // 'hello'
-   * ```
-   */
-  unwrap(): NeverthrowResultAsync<T, E>
+  tapErr(fn: (error: E) => MaybePromise<void>): ResultAsync<T, E>
 }
 
-/**
- * Internal class that wraps a `neverthrow` Result to provide additional chainable methods.
- * @template T The type of the value in case of success.
- * @template E The type of the error in case of failure.
- * @internal
- * @remarks This class is not exported and used internally to implement the enhanced `Result` interface.
- */
-class ResultWrapper<T, E> implements Result<T, E> {
-  constructor(private result: NeverthrowResult<T, E>) {}
+class Ok<T, E> implements Result<T, E> {
+  constructor(private readonly value: T) {}
+
+  isOk(): boolean {
+    return true
+  }
+
+  isErr(): boolean {
+    return false
+  }
+
+  map<U>(fn: (value: T) => U): Result<U, E> {
+    return new Ok<U, E>(fn(this.value))
+  }
+
+  mapErr<F>(_fn: (error: E) => F): Result<T, F> {
+    return new Ok<T, F>(this.value)
+  }
+
+  andThen<U, F>(fn: (value: T) => Result<U, F>): Result<U, E | F> {
+    return fn(this.value)
+  }
+
+  orElse<F>(_fn: (error: E) => Result<T, F>): Result<T, E | F> {
+    return new Ok<T, E | F>(this.value)
+  }
+
+  unwrapOr(_defaultValue: T): T {
+    return this.value
+  }
+
+  unwrapOrElse(_fn: (error: E) => T): T {
+    return this.value
+  }
+
+  match<U>(branches: { ok: (value: T) => U; err: (error: E) => U }): U {
+    return branches.ok(this.value)
+  }
 
   toOption(): Option<T> {
-    return this.result.isOk() ? some(this.result.unwrapOr(undefined as T)) : none()
+    return some(this.value)
   }
 
   filter(predicate: (value: T) => boolean, error: E): Result<T, E> {
-    return new ResultWrapper<T, E>(
-      this.result.andThen((value: T) =>
-        predicate(value) ? new Ok<T, E>(value) : new Err<T, E>(error)
-      )
-    )
+    return predicate(this.value) ? this : new Err(error)
   }
 
-  zip<U, F>(other: NeverthrowResult<U, F>): Result<[T, U], E | F> {
-    return new ResultWrapper<[T, U], E | F>(
-      this.result.andThen((t: T) =>
-        other.isOk()
-          ? new Ok<[T, U], E | F>([t, other.unwrapOr(undefined as U)] as [T, U])
-          : new Err<[T, U], E | F>(other.unwrapOr(undefined as F) as E | F)
-      )
-    )
+  zip<U, F>(other: Result<U, F>): Result<[T, U], E | F> {
+    return other.match({
+      ok: (value: U): Result<[T, U], E | F> => new Ok<[T, U], E | F>([this.value, value] as [T, U]),
+      err: (error: F): Result<[T, U], E | F> => new Err<[T, U], E | F>(error),
+    })
   }
 
   flatten(): Result<Unwrap<T>, E> {
-    return new ResultWrapper<Unwrap<T>, E>(
-      this.result.andThen((value: T) =>
-        isResult<Unwrap<T>, E>(value)
-          ? (value as NeverthrowResult<Unwrap<T>, E>)
-          : new Ok<Unwrap<T>, E>(value as Unwrap<T>)
+    if (isResult<Unwrap<T>, E>(this.value)) {
+      return this.value as Result<Unwrap<T>, E>
+    }
+    return new Ok<Unwrap<T>, E>(this.value as Unwrap<T>)
+  }
+
+  contains(value: T): boolean {
+    return this.value === value
+  }
+
+  recover(_fn: (error: E) => T): Result<T, E> {
+    return this
+  }
+
+  sequence(): Result<T[], E> {
+    return new Ok<T[], E>(this.value instanceof Array ? this.value : [this.value])
+  }
+
+  tap(fn: (value: T) => void): Result<T, E> {
+    fn(this.value)
+    return this
+  }
+
+  tapErr(_fn: (error: E) => void): Result<T, E> {
+    return this
+  }
+
+  toAsync(): ResultAsync<T, E> {
+    return new ResultAsync(Promise.resolve(new Ok<T, E>(this.value)))
+  }
+}
+
+class Err<T, E> implements Result<T, E> {
+  constructor(private readonly error: E) {}
+
+  isOk(): boolean {
+    return false
+  }
+
+  isErr(): boolean {
+    return true
+  }
+
+  map<U>(_fn: (value: T) => U): Result<U, E> {
+    return new Err<U, E>(this.error)
+  }
+
+  mapErr<F>(fn: (error: E) => F): Result<T, F> {
+    return new Err<T, F>(fn(this.error))
+  }
+
+  andThen<U, F>(_fn: (value: T) => Result<U, F>): Result<U, E | F> {
+    return new Err<U, E | F>(this.error as E | F)
+  }
+
+  orElse<F>(fn: (error: E) => Result<T, F>): Result<T, E | F> {
+    return fn(this.error)
+  }
+
+  unwrapOr(defaultValue: T): T {
+    return defaultValue
+  }
+
+  unwrapOrElse(fn: (error: E) => T): T {
+    return fn(this.error)
+  }
+
+  match<U>(branches: { ok: (value: T) => U; err: (error: E) => U }): U {
+    return branches.err(this.error)
+  }
+
+  toOption(): Option<T> {
+    return none() as Option<T>
+  }
+
+  filter(_predicate: (value: T) => boolean, error: E): Result<T, E> {
+    return new Err<T, E>(error)
+  }
+
+  zip<U, F>(_other: Result<U, F>): Result<[T, U], E | F> {
+    return new Err<[T, U], E | F>(this.error as E | F)
+  }
+
+  flatten(): Result<Unwrap<T>, E> {
+    return new Err<Unwrap<T>, E>(this.error)
+  }
+
+  contains(_value: T): boolean {
+    return false
+  }
+
+  recover(fn: (error: E) => T): Result<T, E> {
+    return new Ok<T, E>(fn(this.error))
+  }
+
+  sequence(): Result<T[], E> {
+    return new Err<T[], E>(this.error)
+  }
+
+  tap(_fn: (value: T) => void): Result<T, E> {
+    return this
+  }
+
+  tapErr(fn: (error: E) => void): Result<T, E> {
+    fn(this.error)
+    return this
+  }
+
+  toAsync(): ResultAsync<T, E> {
+    return new ResultAsync(Promise.resolve(new Err<T, E>(this.error)))
+  }
+}
+
+class ResultAsync<T, E> implements ResultAsync<T, E> {
+  constructor(private readonly promise: Promise<Result<T, E>>) {}
+
+  static fromPromise<T, E>(promise: Promise<T>, onError: (e: unknown) => E): ResultAsync<T, E> {
+    return new ResultAsync(promise.then((value) => new Ok<T, E>(value)).catch((e) => new Err<T, E>(onError(e))))
+  }
+
+  static fromSafePromise<T>(promise: Promise<T>): ResultAsync<T, never> {
+    return new ResultAsync(promise.then((value) => new Ok<T, never>(value)))
+  }
+
+  async isOk(): Promise<boolean> {
+    return (await this.promise).isOk()
+  }
+
+  async isErr(): Promise<boolean> {
+    return (await this.promise).isErr()
+  }
+
+  map<U>(fn: (value: T) => MaybePromise<U>): ResultAsync<U, E> {
+    return new ResultAsync(
+      this.promise.then((result) =>
+        result.match({
+          ok: (value) => Promise.resolve(fn(value)).then((mapped) => new Ok<U, E>(mapped)),
+          err: (error) => Promise.resolve(new Err<U, E>(error)),
+        })
       )
     )
   }
 
-  contains(value: T): boolean {
-    return this.result.isOk() && this.result.unwrapOr(undefined as T) === value
-  }
-
-  recover(fn: (error: E) => T): Result<T, E> {
-    return new ResultWrapper<T, E>(this.result.orElse((e: E) => new Ok<T, E>(fn(e))))
-  }
-
-  sequence(): Result<T[], E> {
-    return new ResultWrapper<T[], E>(
-      this.result.andThen((value: T) => new Ok<T[], E>(value instanceof Array ? value : [value]))
+  mapErr<F>(fn: (error: E) => MaybePromise<F>): ResultAsync<T, F> {
+    return new ResultAsync(
+      this.promise.then((result) =>
+        result.match({
+          ok: (value) => Promise.resolve(new Ok<T, F>(value)),
+          err: (error) => Promise.resolve(fn(error)).then((mapped) => new Err<T, F>(mapped)),
+        })
+      )
     )
   }
 
-  tap(fn: (value: T) => void): Result<T, E> {
-    return new ResultWrapper<T, E>(
-      this.result.map((value) => {
-        fn(value)
-        return value
+  andThen<U, F>(fn: (value: T) => Result<U, F> | ResultAsync<U, F>): ResultAsync<U, E | F> {
+    return new ResultAsync(
+      this.promise.then((result) =>
+        result.match({
+          ok: (value): Promise<Result<U, E | F>> => {
+            const next = fn(value)
+            return next instanceof ResultAsync ? next.promise : Promise.resolve(next)
+          },
+          err: (error): Promise<Result<U, E | F>> => Promise.resolve(new Err<U, E | F>(error)),
+        })
+      )
+    )
+  }
+
+  orElse<F>(fn: (error: E) => Result<T, F> | ResultAsync<T, F>): ResultAsync<T, E | F> {
+    return new ResultAsync(
+      this.promise.then((result) =>
+        result.match({
+          ok: (value): Promise<Result<T, E | F>> => Promise.resolve(new Ok<T, E | F>(value)),
+          err: (error): Promise<Result<T, E | F>> => {
+            const next = fn(error)
+            return next instanceof ResultAsync ? next.promise : Promise.resolve(next)
+          },
+        })
+      )
+    )
+  }
+
+  async unwrapOr(defaultValue: MaybePromise<T>): Promise<T> {
+    return this.promise.then((result) =>
+      result.match({
+        ok: (value) => Promise.resolve(value),
+        err: () => Promise.resolve(defaultValue),
       })
     )
   }
 
-  unwrap(): NeverthrowResult<T, E> {
-    return this.result
+  async unwrapOrElse(fn: (error: E) => MaybePromise<T>): Promise<T> {
+    return this.promise.then((result) =>
+      result.match({
+        ok: (value) => Promise.resolve(value),
+        err: (error) => Promise.resolve(fn(error)),
+      })
+    )
   }
-}
 
-/**
- * Internal class that wraps a `neverthrow` ResultAsync to provide additional chainable methods.
- * @template T The type of the value in case of success.
- * @template E The type of the error in case of failure.
- * @internal
- * @remarks This class is not exported and used internally to implement the enhanced `ResultAsync` interface.
- */
-class ResultAsyncWrapper<T, E> implements ResultAsync<T, E> {
-  constructor(private resultAsync: NeverthrowResultAsync<T, E>) {}
+  async match<U>(branches: { ok: (value: T) => MaybePromise<U>; err: (error: E) => MaybePromise<U> }): Promise<U> {
+    return this.promise.then((result) =>
+      result.match({
+        ok: (value) => Promise.resolve(branches.ok(value)),
+        err: (error) => Promise.resolve(branches.err(error)),
+      })
+    )
+  }
 
   toOption(): OptionAsync<T> {
-    return OptionAsync.from<T>(
-      this.resultAsync.then((result: NeverthrowResult<T, E>) =>
-        result.isOk() ? result.unwrapOr(undefined as T) : null
-      ) as Promise<T | null | undefined>
-    )
-  }
-
-  filter(
-    predicate: (value: T) => MaybePromise<boolean>,
-    error: MaybePromise<E>
-  ): ResultAsync<T, E> {
-    return new ResultAsyncWrapper<T, E>(
-      this.resultAsync.andThen((value: T) =>
-        NeverthrowResultAsync.fromPromise(
-          Promise.all([predicate(value), error]),
-          (e) => e as E // fallback error mapper, rarely used here
-        ).andThen(([p, e]) => (p ? ok(value) : err(e)))
+    return OptionAsync.from(
+      this.promise.then((result) =>
+        result.match({
+          ok: (value) => value,
+          err: () => null,
+        })
       )
     )
   }
 
-  zip<U, F>(
-    other: NeverthrowResult<U, F> | NeverthrowResultAsync<U, F>
-  ): ResultAsync<[T, U], E | F> {
-    if (other instanceof NeverthrowResultAsync) {
-      return new ResultAsyncWrapper<[T, U], E | F>(
-        this.resultAsync.andThen((value1: T) =>
-          other.andThen((value2: U) => new Ok<[T, U], E | F>([value1, value2]))
-        )
+  filter(predicate: (value: T) => MaybePromise<boolean>, error: MaybePromise<E>): ResultAsync<T, E> {
+    return new ResultAsync(
+      this.promise.then((result) =>
+        result.match({
+          ok: (value) =>
+            Promise.resolve(predicate(value)).then((p) =>
+              p ? new Ok<T, E>(value) : new Err<T, E>(Promise.resolve(error) as E)
+            ),
+          err: (error) => Promise.resolve(new Err<T, E>(error)),
+        })
       )
-    } else {
-      return new ResultAsyncWrapper<[T, U], E | F>(
-        this.resultAsync.andThen((value1: T) =>
-          other.isOk()
-            ? new Ok<[T, U], E | F>([value1, other.unwrapOr(undefined as U)])
-            : new Err<[T, U], E | F>(other.unwrapOr(undefined as F) as F)
-        )
+    )
+  }
+
+  zip<U, F>(other: Result<U, F> | ResultAsync<U, F>): ResultAsync<[T, U], E | F> {
+    return new ResultAsync<[T, U], E | F>(
+      Promise.all([this.promise, other instanceof ResultAsync ? other.promise : Promise.resolve(other)]).then(
+        ([result1, result2]) =>
+          result1.match({
+            ok: (value1) =>
+              result2.match({
+                ok: (value2) => new Ok<T, E | F>(value1).map((value1) => [value1, value2]),
+                err: (error2) => new Err<[T, U], E | F>(error2),
+              }),
+            err: (error1) => new Err<[T, U], E | F>(error1),
+          })
       )
-    }
+    )
   }
 
   flatten(): ResultAsync<Unwrap<T>, E> {
-    return new ResultAsyncWrapper(
-      this.resultAsync.andThen((value) =>
-        isResultAsync<Unwrap<T>, E>(value)
-          ? value
-          : isResult<Unwrap<T>, E>(value)
-          ? new NeverthrowResultAsync<Unwrap<T>, E>(Promise.resolve(value))
-          : okAsync<Unwrap<T>, E>(value as Unwrap<T>)
+    return new ResultAsync<Unwrap<T>, E>(
+      this.promise.then((result) =>
+        result.match({
+          ok: (value) => {
+            if (isResult<Unwrap<T>, any>(value)) {
+              return value as Result<Unwrap<T>, E>
+            }
+            return new Ok<Unwrap<T>, E>(value as Unwrap<T>)
+          },
+          err: (error) => new Err<Unwrap<T>, E>(error),
+        })
       )
     )
   }
 
   async contains(value: T): Promise<boolean> {
-    const result = await this.resultAsync
-    return result.isOk() && result.unwrapOr(undefined as T) === value
+    const result = await this.promise
+    return result.match({
+      ok: (v) => v === value,
+      err: () => false,
+    })
   }
 
   recover(fn: (error: E) => MaybePromise<T>): ResultAsync<T, E> {
-    return new ResultAsyncWrapper<T, E>(
-      this.resultAsync.orElse(
-        (e: E) =>
-          new NeverthrowResultAsync<T, E>(Promise.resolve(fn(e)).then((v) => new Ok<T, E>(v)))
+    return new ResultAsync(
+      this.promise.then((result) =>
+        result.match({
+          ok: (value) => Promise.resolve(value).then((value) => new Ok<T, E>(value)),
+          err: (error) => Promise.resolve(fn(error)).then((recovered) => new Ok<T, E>(recovered)),
+        })
       )
     )
   }
 
   sequence(): ResultAsync<T[], E> {
-    return new ResultAsyncWrapper<T[], E>(
-      this.resultAsync.andThen(
-        (value: T) => new Ok<T[], E>(value instanceof Array ? value : [value])
+    return new ResultAsync<T[], E>(
+      this.promise.then((result) =>
+        result.match<Result<T[], E>>({
+          ok: (value) => new Ok<T[], E>(Array.isArray(value) ? value : [value]),
+          err: (error) => new Err<T[], E>(error),
+        })
       )
     )
   }
 
   tap(fn: (value: T) => MaybePromise<void>): ResultAsync<T, E> {
-    return new ResultAsyncWrapper(
-      this.resultAsync.map((value) => Promise.resolve(fn(value)).then(() => value))
+    return new ResultAsync(
+      this.promise.then(async (result) => {
+        if (result.isOk()) {
+          await fn(result.unwrapOr(none() as T))
+        }
+        return result
+      })
     )
   }
 
-  unwrap(): NeverthrowResultAsync<T, E> {
-    return this.resultAsync
+  tapErr(fn: (error: E) => MaybePromise<void>): ResultAsync<T, E> {
+    return new ResultAsync(
+      this.promise.then(async (result) => {
+        if (result.isErr()) {
+          await fn(result.match({ ok: () => undefined as never, err: (e) => e }))
+        }
+        return result
+      })
+    )
   }
 }
 
-/**
- * Type guard to check if a value is a `neverthrow` Result.
- * @template T The type of the value contained in the Result.
- * @template E The type of the error contained in the Result.
- * @param value The value to check.
- * @returns `true` if the value is a `NeverthrowResult<T, E>`, `false` otherwise.
- * @example
- * ```typescript
- * import { ok, err } from 'neverever';
- * function processResult<T, E>(value: any): value is Result<T, E> {
- *   return value instanceof Object && ('isOk' in value && 'isErr' in value);
- * }
- * console.log(processResult(ok(42))); // true
- * console.log(processResult(err('failed'))); // true
- * console.log(processResult(42)); // false
- * ```
- * @internal
- */
-function isResult<T, E>(value: any): value is NeverthrowResult<T, E> {
+function isResult<T, E>(value: any): value is Result<T, E> {
   return value instanceof Ok || value instanceof Err
 }
 
-/**
- * Type guard to check if a value is a `neverthrow` ResultAsync.
- * @template T The type of the value contained in the ResultAsync.
- * @template E The type of the error contained in the ResultAsync.
- * @param value The value to check.
- * @returns `true` if the value is a `NeverthrowResultAsync<T, E>`, `false` otherwise.
- * @example
- * ```typescript
- * import { okAsync, errAsync } from 'neverever';
- * function processResultAsync<T, E>(value: any): value is ResultAsync<T, E> {
- *   return value instanceof Object && ('map' in value && 'andThen' in value);
- * }
- * console.log(processResultAsync(okAsync(42))); // true
- * console.log(processResultAsync(errAsync('failed'))); // true
- * console.log(processResultAsync(42)); // false
- * ```
- * @internal
- */
-function isResultAsync<T, E>(value: any): value is NeverthrowResultAsync<T, E> {
-  return value instanceof NeverthrowResultAsync
+function isResultAsync<T, E>(value: any): value is ResultAsync<T, E> {
+  return value instanceof ResultAsync
 }
 
-/**
- * Safely executes a synchronous or asynchronous function, wrapping the result in a `Result` or `ResultAsync`.
- * @template T The type of the value produced by the function.
- * @template E The type of the error produced by the error handler.
- * @param fn A function that produces a value or throws an error, which may return a Promise.
- * @param onError A function to handle errors, converting them to the error type `E`.
- * @returns A `Result<T, E>` for synchronous functions or `ResultAsync<T, E>` for asynchronous functions.
- * @example
- * ```typescript
- * import { tryCatch } from 'neverever';
- * const syncResult = tryCatch(
- *   () => {
- *     if (Math.random() > 0.5) throw new Error('Failed');
- *     return 'success';
- *   },
- *   (e) => (e instanceof Error ? e.message : 'Unknown error')
- * );
- * console.log(syncResult.unwrapOr('')); // 'success' or ''
- *
- * const asyncResult = tryCatch(
- *   async () => {
- *     await new Promise(resolve => setTimeout(resolve, 100));
- *     return 'async';
- *   },
- *   (e) => 'Async error'
- * );
- * console.log(await asyncResult.unwrapOr('')); // 'async' or ''
- * ```
- */
-export function tryCatch<T, E>(
-  fn: () => MaybePromise<T>,
-  onError: (e: unknown) => E
-): Result<T, E> | ResultAsync<T, E> {
+function ok<T, E>(value: T): Result<T, E> {
+  return new Ok<T, E>(value)
+}
+
+function err<T, E>(error: E): Result<T, E> {
+  return new Err<T, E>(error)
+}
+
+function okAsync<T, E>(value: MaybePromise<T>): ResultAsync<T, E> {
+  return new ResultAsync(Promise.resolve(value).then((v) => new Ok<T, E>(v)))
+}
+
+function errAsync<T, E>(error: MaybePromise<E>): ResultAsync<T, E> {
+  return new ResultAsync(Promise.resolve(error).then((e) => new Err<T, E>(e)))
+}
+
+function fromPromise<T, E>(promise: Promise<T>, onError: (e: unknown) => E): ResultAsync<T, E> {
+  return ResultAsync.fromPromise(promise, onError)
+}
+
+function fromSafePromise<T>(promise: Promise<T>): ResultAsync<T, never> {
+  return ResultAsync.fromSafePromise(promise)
+}
+
+function fromThrowable<T, E>(fn: () => T, onError: (e: unknown) => E): Result<T, E> {
   try {
-    const result = fn()
-    if (isPromise(result)) {
-      return new ResultAsyncWrapper<T, E>(
-        new NeverthrowResultAsync<T, E>(
-          result.then((value) => new Ok<T, E>(value)).catch((e) => new Err<T, E>(onError(e)))
-        )
-      )
-    }
-    return new ResultWrapper<T, E>(new Ok<T, E>(result))
+    return new Ok<T, E>(fn())
   } catch (e) {
-    return new ResultWrapper<T, E>(new Err<T, E>(onError(e)))
+    return new Err<T, E>(onError(e))
   }
 }
 
-/**
- * Re-exports `neverthrow`'s `Result` type with additional chainable methods.
- * @template T The type of the value in case of success.
- * @template E The type of the error in case of failure.
- */
-export { NeverthrowResult as Result }
+function fromAsyncThrowable<T, E>(fn: () => Promise<T>, onError: (e: unknown) => E): ResultAsync<T, E> {
+  return new ResultAsync(
+    fn()
+      .then((value) => new Ok<T, E>(value))
+      .catch((e) => new Err<T, E>(onError(e)))
+  )
+}
 
-/**
- * Re-exports `neverthrow`'s `ResultAsync` type with additional chainable methods.
- * @template T The type of the value in case of success.
- * @template E The type of the error in case of failure.
- */
-export { NeverthrowResultAsync as ResultAsync }
+function safeTry<T, E>(fn: () => MaybePromise<T>, onError: (e: unknown) => E): Result<T, E> | ResultAsync<T, E> {
+  try {
+    const result = fn()
+    if (result instanceof Promise) {
+      return new ResultAsync(result.then((value) => new Ok<T, E>(value)).catch((e) => new Err<T, E>(onError(e))))
+    }
+    return new Ok<T, E>(result)
+  } catch (e) {
+    return new Err<T, E>(onError(e))
+  }
+}
 
-/**
- * Creates a successful Result containing a value (`Ok`).
- * @template T The type of the value.
- * @template E The type of the error (not used in `Ok`).
- * @param value The value to wrap.
- * @returns A `Result<T, E>` containing the value.
- * @example
- * ```typescript
- * import { ok } from 'neverever';
- * const result = ok<string, string>('success');
- * console.log(result.unwrapOr('')); // 'success'
- * console.log(result.isOk()); // true
- * ```
- */
-export { ok }
-
-/**
- * Creates a failed Result containing an error (`Err`).
- * @template T The type of the value (not used in `Err`).
- * @template E The type of the error.
- * @param error The error to wrap.
- * @returns A `Result<T, E>` containing the error.
- * @example
- * ```typescript
- * import { err } from 'neverever';
- * const result = err<string, string>('failed');
- * console.log(result.unwrapOr('default')); // 'default'
- * console.log(result.isErr()); // true
- * ```
- */
-export { err }
-
-/**
- * Represents a successful Result (`Ok`) containing a value.
- * @template T The type of the value.
- * @template E The type of the error (not used in `Ok`).
- */
-export { Ok }
-
-/**
- * Represents a failed Result (`Err`) containing an error.
- * @template T The type of the value (not used in `Err`).
- * @template E The type of the error.
- */
-export { Err }
+export { Result, ResultAsync, Ok, Err }
+export { ok, err, okAsync, errAsync, isResult, isResultAsync }
+export { safeTry, fromPromise, fromSafePromise, fromThrowable, fromAsyncThrowable }
