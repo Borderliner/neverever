@@ -1,6 +1,6 @@
 # neverever
 
-`neverever` is a TypeScript library for safe, functional programming in JavaScript and TypeScript. It provides enhanced `Option` and `Result` types for handling optional values and success/error outcomes, building on the `neverthrow` library with additional chainable methods and utilities. The library supports both synchronous and asynchronous workflows, making it ideal for robust error handling and data transformation.
+`neverever` is a zero-dependency TypeScript library for safe handling of data in TypeScript. It provides enhanced `Option<T>` and `Result<T, E>` types for handling optional values and success/error outcomes, just like the `neverthrow` library with additional chainable methods and utilities. The library supports both synchronous and asynchronous workflows, making it ideal for robust error handling and data transformation.
 
 ## Installation
 

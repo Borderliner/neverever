@@ -1,5 +1,5 @@
 // index.ts
-export { Option, OptionAsync, some, none, from, tryOption } from './option'
+export { Option, OptionAsync, some, none, from, tryOption, isOption, isOptionAsync } from './option'
 export {
   Result,
   ResultAsync,

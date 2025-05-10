@@ -33,7 +33,7 @@ describe('Option', () => {
       const chained = opt.andThen((n) => some(n.toString()))
       expect(chained.unwrapOr('')).toBe('42')
       const noneChained = opt.andThen(() => none())
-      expect(noneChained.unwrapOr('')).toBe('')
+      expect(noneChained.unwrapOr(null)).toBe(null)
     })
 
     test('filter retains value if predicate passes', () => {
