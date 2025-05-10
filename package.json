@@ -1,7 +1,7 @@
 {
   "name": "neverever",
-  "version": "0.0.1",
-  "description": "Safe, Simple FP for TypeScript",
+  "version": "0.3.0",
+  "description": "Easy-to-use Option and Result types for TypeScript",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -9,15 +9,12 @@
     "test": "jest",
     "prepublishOnly": "pnpm run build"
   },
-	"devDependencies": {
-		"@types/jest": "^29.5.14",
-		"jest": "^29.7.0",
-		"ts-jest": "^29.3.2",
-		"typescript": "^5.8.3"
-	},
-	"dependencies": {
-		"neverthrow": "^8.2.0"
-	},
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.2",
+    "typescript": "^5.8.3"
+  },
   "author": "Mohammadreza Hajianpour <hajianpour.mr@gmail.com>",
   "license": "MIT",
   "repository": {
@@ -27,8 +24,10 @@
   "keywords": [
     "typescript",
     "functional-programming",
-    "neverthrow",
+    "result",
     "option",
+    "rust",
+    "fp",
     "pipeline"
   ]
 }

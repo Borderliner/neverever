@@ -1,3 +1,4 @@
+// utils.ts
 import { MaybePromise, OptionLike, ResultLike } from './types'
 
 /**
@@ -49,8 +50,15 @@ import { MaybePromise, OptionLike, ResultLike } from './types'
  * ```
  */
 export function pipe<T, U>(value: T, ...fns: Array<(arg: any) => any>): MaybePromise<U> {
-  return fns.reduce(
-    (result, fn) => Promise.resolve(result).then(fn),
-    value as MaybePromise<any>
-  ) as MaybePromise<U>
+  return fns.reduce((result, fn) => Promise.resolve(result).then(fn), value as MaybePromise<any>) as MaybePromise<U>
+}
+
+/**
+ * Unwraps a MaybePromise to its inner value.
+ * @template T The inner type.
+ * @param value A MaybePromise value.
+ * @returns The unwrapped value, synchronously or asynchronously.
+ */
+export function unwrapMaybePromise<T>(value: MaybePromise<T>): Promise<T> {
+  return Promise.resolve(value)
 }
