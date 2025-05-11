@@ -1,5 +1,5 @@
 // utils.ts
-import { MaybePromise } from './types'
+import { EnsurePromise, MaybePromise } from './types'
 
 /**
  * Helper type to compute the output type of a pipeline of functions.

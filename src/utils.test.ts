@@ -1,7 +1,6 @@
-// utils.test.ts
 import { pipe, unwrapMaybePromise } from './utils'
-import { some, none, Option, OptionAsync } from './option'
-import { ok, err, Result, ResultAsync } from './result'
+import { Option, OptionAsync } from './option'
+import { Result, ResultAsync } from './result'
 import { MaybePromise, OptionLike, ResultLike } from './types'
 
 describe('utils', () => {
@@ -41,7 +40,7 @@ describe('utils', () => {
 
     it('should handle a pipeline with Option correctly', () => {
       const result = pipe(
-        some(42),
+        Option.some(42),
         (opt: Option<number>) => opt.map((n) => n * 2),
         (opt: Option<number>) => opt.map((n) => n + 10)
       )
@@ -50,30 +49,37 @@ describe('utils', () => {
       expect(typedResult.unwrapOr(0)).toBe(94)
     })
 
+    it('should handle a pipeline with Option returning none', () => {
+      const result = pipe(
+        Option.none<number>(),
+        (opt: Option<number>) => opt.map((n) => n * 2),
+        (opt: Option<number>) => opt.map((n) => n + 10)
+      )
+      expect(result.unwrapOr(0)).toBe(0)
+      const typedResult: Option<number> = result // Verify type
+      expect(typedResult.unwrapOr(0)).toBe(0)
+    })
+
     it('should handle a pipeline with OptionAsync', async () => {
       const result = pipe(
-        some(42).toAsync(),
+        Option.some(42).toAsync(),
         async (opt: OptionLike<number>) => {
           const resolved = opt instanceof Promise ? await opt : opt
-          // Convert Option<number> to OptionAsync<number>, leave OptionAsync<number> as is
-          const asyncOpt = 'toAsync' in resolved ? resolved.toAsync() : resolved
-          return asyncOpt.map((n) => n * 2)
+          return resolved.map((n) => n * 2)
         },
         async (opt: OptionLike<number>) => {
           const resolved = opt instanceof Promise ? await opt : opt
-          const asyncOpt = 'toAsync' in resolved ? resolved.toAsync() : resolved
-          return asyncOpt.map((n) => n + 10)
+          return resolved.map((n) => n + 10)
         }
       )
-      const unwrapped = await (await result).unwrapOr(0)
-      expect(unwrapped).toBe(94)
-      const typedResult: Promise<Option<number>> = result // Verify type
+      expect(await (await result).unwrapOr(0)).toBe(94)
+      const typedResult: Promise<OptionLike<number>> = result // Verify type
       expect(await (await typedResult).unwrapOr(0)).toBe(94)
     })
 
     it('should handle a pipeline with Result', () => {
       const result = pipe(
-        ok<string, string>('data'),
+        Result.ok<string, string>('data'),
         (res: Result<string, string>) => res.map((s) => s.toUpperCase()),
         (res: Result<string, string>) => res.map((s) => s + '!')
       )
@@ -82,9 +88,20 @@ describe('utils', () => {
       expect(typedResult.unwrapOr('')).toBe('DATA!')
     })
 
+    it('should handle a pipeline with Result returning err', () => {
+      const result = pipe(
+        Result.err<string, string>('error'),
+        (res: Result<string, string>) => res.map((s) => s.toUpperCase()),
+        (res: Result<string, string>) => res.map((s) => s + '!')
+      )
+      expect(result.unwrapOr('')).toBe('')
+      const typedResult: Result<string, string> = result // Verify type
+      expect(typedResult.unwrapOr('')).toBe('')
+    })
+
     it('should handle a pipeline with ResultAsync', async () => {
       const result = pipe(
-        ok<string, string>('data').toAsync(),
+        Result.ok<string, string>('data').toAsync(),
         async (res: ResultLike<string, string>) => {
           const resolved = res instanceof Promise ? await res : res
           return resolved.map((s) => s.toUpperCase())
@@ -94,15 +111,14 @@ describe('utils', () => {
           return resolved.map((s) => s + '!')
         }
       )
-      const unwrapped = await (await result).unwrapOr('')
-      expect(unwrapped).toBe('DATA!')
+      expect(await (await result).unwrapOr('')).toBe('DATA!')
       const typedResult: Promise<ResultLike<string, string>> = result // Verify type
       expect(await (await typedResult).unwrapOr('')).toBe('DATA!')
     })
 
     it('should handle a pipeline with Promise<Result>', async () => {
       const result = pipe(
-        Promise.resolve(ok<string, string>('data')),
+        Promise.resolve(Result.ok<string, string>('data')),
         async (res: ResultLike<string, string>) => {
           const resolved = res instanceof Promise ? await res : res
           return resolved.map((s) => s.toUpperCase())
@@ -112,10 +128,9 @@ describe('utils', () => {
           return resolved.map((s) => s + '!')
         }
       )
-      const unwrapped = await (await result).unwrapOr('')
-      expect(unwrapped).toBe('DATA!')
+      expect((await result).unwrapOr('')).toBe('DATA!')
       const typedResult: Promise<ResultLike<string, string>> = result // Verify type
-      expect(await (await typedResult).unwrapOr('')).toBe('DATA!')
+      expect((await typedResult).unwrapOr('')).toBe('DATA!')
     })
 
     it('should handle an empty pipeline', () => {
@@ -138,26 +153,16 @@ describe('utils', () => {
       await expect(typedResult).rejects.toThrow('fail')
     })
 
-    it('should handle a pipeline with Option returning none', () => {
+    it('should handle a complex pipeline with multiple transformations', async () => {
       const result = pipe(
-        none(), // No type parameter
-        (opt: Option<unknown>) => opt.map((n) => n as number * 2),
-        (opt: Option<number>) => opt.map((n) => n + 10)
+        { value: 10 },
+        (obj: { value: number }) => ({ value: obj.value * 2 }),
+        async (obj: { value: number }) => ({ value: obj.value + 5 }),
+        (obj: { value: number }) => obj.value.toString()
       )
-      expect(result.unwrapOr(0)).toBe(0)
-      const typedResult: Option<number> = result // Verify type
-      expect(typedResult.unwrapOr(0)).toBe(0)
-    })
-
-    it('should handle a pipeline with Result returning err', () => {
-      const result = pipe(
-        err<string, string>('error'),
-        (res: Result<string, string>) => res.map((s) => s.toUpperCase()),
-        (res: Result<string, string>) => res.map((s) => s + '!')
-      )
-      expect(result.unwrapOr('')).toBe('')
-      const typedResult: Result<string, string> = result // Verify type
-      expect(typedResult.unwrapOr('')).toBe('')
+      expect(await result).toBe('25')
+      const typedResult: Promise<string> = result // Verify type
+      expect(await typedResult).toBe('25')
     })
   })
 
@@ -188,15 +193,49 @@ describe('utils', () => {
     })
 
     it('should unwrap a MaybePromise containing an Option', async () => {
-      const value: MaybePromise<Option<number>> = some(42)
+      const value: MaybePromise<Option<number>> = Option.some(42)
       const result = await unwrapMaybePromise(value)
       expect(result.unwrapOr(0)).toBe(42)
+
+      const noneValue: MaybePromise<Option<number>> = Option.none()
+      const noneResult = await unwrapMaybePromise(noneValue)
+      expect(noneResult.unwrapOr(0)).toBe(0)
+    })
+
+    it('should unwrap a MaybePromise containing an OptionAsync', async () => {
+      const value: MaybePromise<OptionAsync<number>> = OptionAsync.some(42)
+      const result = await unwrapMaybePromise(value)
+      expect(await result.unwrapOr(0)).toBe(42)
+
+      const noneValue: MaybePromise<OptionAsync<number>> = OptionAsync.none()
+      const noneResult = await unwrapMaybePromise(noneValue)
+      expect(await noneResult.unwrapOr(0)).toBe(0)
     })
 
     it('should unwrap a MaybePromise containing a Result', async () => {
-      const value: MaybePromise<Result<string, string>> = ok<string, string>('data')
+      const value: MaybePromise<Result<string, string>> = Result.ok('data')
       const result = await unwrapMaybePromise(value)
       expect(result.unwrapOr('')).toBe('data')
+
+      const errValue: MaybePromise<Result<string, string>> = Result.err('error')
+      const errResult = await unwrapMaybePromise(errValue)
+      expect(errResult.unwrapOr('')).toBe('')
+    })
+
+    it('should unwrap a MaybePromise containing a ResultAsync', async () => {
+      const value: MaybePromise<ResultAsync<string, string>> = ResultAsync.ok('data')
+      const result = await unwrapMaybePromise(value)
+      expect(await result.unwrapOr('')).toBe('data')
+
+      const errValue: MaybePromise<ResultAsync<string, string>> = ResultAsync.err('error')
+      const errResult = await unwrapMaybePromise(errValue)
+      expect(await errResult.unwrapOr('')).toBe('')
+    })
+
+    it('should unwrap a MaybePromise containing a Promise', async () => {
+      const value: MaybePromise<Promise<number>> = Promise.resolve(Promise.resolve(42))
+      const result = await unwrapMaybePromise(value)
+      expect(await result).toBe(42)
     })
   })
 })

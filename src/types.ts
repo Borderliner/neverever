@@ -23,6 +23,11 @@ export type Unwrap<T> = T extends Promise<infer U>
 export type MaybePromise<T> = T | Promise<T>
 
 /**
+ * Utility type to normalize MaybePromise<T> to Promise<T> (unused for now)
+ */
+export type EnsurePromise<T> = T extends Promise<infer U> ? Promise<U> : Promise<T>
+
+/**
  * Utility type to check if a type is a Promise.
  */
 export type IsPromise<T> = T extends Promise<any> ? true : false

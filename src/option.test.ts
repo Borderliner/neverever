@@ -1,14 +1,12 @@
-// option.test.ts
-import { some, none, from, tryOption, Option, OptionAsync, isOption } from './option'
-import { ok, err, okAsync, errAsync } from './result'
-import { unwrapMaybePromise } from './utils'
+import { Option, OptionAsync, isOption, isOptionAsync } from './option'
+import { ResultAsync } from './result'
 
 describe('Option', () => {
   describe('Some', () => {
     let opt: Option<number>
 
     beforeEach(() => {
-      opt = some(42)
+      opt = Option.some(42)
     })
 
     test('isSome returns true', () => {
@@ -30,10 +28,10 @@ describe('Option', () => {
     })
 
     test('andThen chains with another Option', () => {
-      const chained = opt.andThen((n) => some(n.toString()))
+      const chained = opt.andThen((n) => Option.some(n.toString()))
       expect(chained.unwrapOr('')).toBe('42')
-      const noneChained = opt.andThen(() => none())
-      expect(noneChained.unwrapOr(null)).toBe(null)
+      const noneChained = opt.andThen(() => Option.none())
+      expect(noneChained.unwrapOr('')).toBe('')
     })
 
     test('filter retains value if predicate passes', () => {
@@ -44,25 +42,25 @@ describe('Option', () => {
     })
 
     test('zip combines with another Some', () => {
-      const other = some('hello')
+      const other = Option.some('hello')
       const zipped = opt.zip(other)
       expect(zipped.unwrapOr([0, ''])).toEqual([42, 'hello'])
-      const zippedWithNone = opt.zip(none())
+      const zippedWithNone = opt.zip(Option.none())
       expect(zippedWithNone.unwrapOr([0, ''])).toEqual([0, ''])
     })
 
     test('flatten unwraps nested Option', () => {
-      const nested = some(some(42))
+      const nested = Option.some(Option.some(42))
       const flat = nested.flatten()
       expect(flat.unwrapOr(0)).toBe(42)
       const nonNested = opt.flatten()
       expect(nonNested.unwrapOr(0)).toBe(42)
-      const nestedNone = some(none())
+      const nestedNone = Option.some(Option.none())
       expect(nestedNone.flatten().unwrapOr(0)).toBe(0)
     })
 
     test('orElse returns self', () => {
-      const alternative = opt.orElse(() => some(99))
+      const alternative = opt.orElse(() => Option.some(99))
       expect(alternative.unwrapOr(0)).toBe(42)
     })
 
@@ -97,7 +95,7 @@ describe('Option', () => {
     test('sequence wraps value in array', () => {
       const sequenced = opt.sequence()
       expect(sequenced.unwrapOr([])).toEqual([42])
-      const arrayOpt = some([1, 2])
+      const arrayOpt = Option.some([1, 2])
       expect(arrayOpt.sequence().unwrapOr([])).toEqual([1, 2])
     })
 
@@ -109,12 +107,19 @@ describe('Option', () => {
     })
 
     test('pipe chains transformations', async () => {
-      const result = opt.pipe(
+      const result = await opt.pipe(
+        (opt) => opt.map((n) => n * 2),
+        (opt) => opt.map((n) => n + 10)
+      )
+      expect(result.unwrapOr(0)).toBe(94)
+    })
+
+    test('pipe with async transformations', async () => {
+      const result = await opt.pipe(
         (opt) => opt.map((n) => n * 2),
         async (opt) => opt.map((n) => n + 10)
       )
-      const unwrapped = await unwrapMaybePromise(result).then((opt) => opt.unwrapOr(0))
-      expect(unwrapped).toBe(94)
+      expect(result.unwrapOr(0)).toBe(94)
     })
   })
 
@@ -122,7 +127,7 @@ describe('Option', () => {
     let opt: Option<number>
 
     beforeEach(() => {
-      opt = none() as Option<number>
+      opt = Option.none<number>()
     })
 
     test('isSome returns false', () => {
@@ -143,7 +148,7 @@ describe('Option', () => {
     })
 
     test('andThen returns None', () => {
-      const chained = opt.andThen((n) => some(n.toString()))
+      const chained = opt.andThen((n) => Option.some(n.toString()))
       expect(chained.isNone()).toBe(true)
     })
 
@@ -153,7 +158,7 @@ describe('Option', () => {
     })
 
     test('zip returns None', () => {
-      const other = some('hello')
+      const other = Option.some('hello')
       const zipped = opt.zip(other)
       expect(zipped.isNone()).toBe(true)
     })
@@ -164,9 +169,9 @@ describe('Option', () => {
     })
 
     test('orElse evaluates alternative', () => {
-      const alternative = opt.orElse(() => some(99))
+      const alternative = opt.orElse(() => Option.some(99))
       expect(alternative.unwrapOr(0)).toBe(99)
-      const noneAlternative = opt.orElse(() => none() as Option<number>)
+      const noneAlternative = opt.orElse(() => Option.none<number>())
       expect(noneAlternative.unwrapOr(0)).toBe(0)
     })
 
@@ -211,63 +216,53 @@ describe('Option', () => {
     })
 
     test('pipe chains transformations', async () => {
-      const result = opt.pipe(
+      const result = await opt.pipe(
         (opt) => opt.map((n) => n * 2),
-        async (opt) => opt.map((n) => n + 10)
+        (opt) => opt.map((n) => n + 10)
       )
-      const unwrapped = await unwrapMaybePromise(result).then((opt) => opt.unwrapOr(0))
-      expect(unwrapped).toBe(0)
+      expect(result.unwrapOr(0)).toBe(0)
     })
   })
 
   describe('Utility Functions', () => {
     describe('from', () => {
       test('creates Some for non-null value', () => {
-        const opt = from('hello')
+        const opt = Option.from('hello')
         expect(opt.unwrapOr('')).toBe('hello')
       })
 
       test('creates None for null', () => {
-        const opt = from(null)
+        const opt = Option.from(null)
         expect(opt.isNone()).toBe(true)
       })
 
       test('creates None for undefined', () => {
-        const opt = from(undefined)
+        const opt = Option.from(undefined)
         expect(opt.isNone()).toBe(true)
       })
     })
 
-    describe('tryOption', () => {
+    describe('try', () => {
       test('creates Some for successful function', () => {
-        const opt = tryOption(() => 'success')
+        const opt = Option.try(() => 'success')
         expect(opt.unwrapOr('')).toBe('success')
       })
 
       test('creates None for throwing function', () => {
-        const opt = tryOption(() => {
+        const opt = Option.try(() => {
           throw new Error('fail')
         })
-        expect(opt.isNone()).toBe(true)
-      })
-
-      test('calls onError when provided', () => {
-        const onError = jest.fn()
-        const opt = tryOption(() => {
-          throw new Error('fail')
-        }, onError)
-        expect(onError).toHaveBeenCalledWith(expect.any(Error))
         expect(opt.isNone()).toBe(true)
       })
     })
 
     describe('isOption', () => {
       test('returns true for Some', () => {
-        expect(isOption(some(42))).toBe(true)
+        expect(isOption(Option.some(42))).toBe(true)
       })
 
       test('returns true for None', () => {
-        expect(isOption(none())).toBe(true)
+        expect(isOption(Option.none())).toBe(true)
       })
 
       test('returns false for non-Option', () => {
@@ -299,72 +294,97 @@ describe('OptionAsync', () => {
       await expect(opt.contains(99)).resolves.toBe(false)
     })
 
-    test('map transforms value', async () => {
+    test('map transforms value with sync fn', async () => {
+      const mapped = opt.map((n) => n * 2)
+      await expect(mapped.unwrapOr(0)).resolves.toBe(84)
+    })
+
+    test('map transforms value with async fn', async () => {
       const mapped = opt.map(async (n) => n * 2)
-      await expect(mapped.then((opt) => opt.unwrapOr(0))).resolves.toBe(84)
+      await expect(mapped.unwrapOr(0)).resolves.toBe(84)
     })
 
     test('andThen chains with Option', async () => {
-      const chained = opt.andThen((n) => some(n.toString()))
-      await expect(chained.then((opt) => opt.unwrapOr(''))).resolves.toBe('42')
-      const noneChained = opt.andThen(() => none())
-      await expect(noneChained.then((opt) => opt.unwrapOr(''))).resolves.toBe('')
+      const chained = opt.andThen((n) => Option.some(n.toString()))
+      await expect(chained.unwrapOr('')).resolves.toBe('42')
+      const noneChained = opt.andThen(() => Option.none())
+      await expect(noneChained.unwrapOr('')).resolves.toBe('')
     })
 
     test('andThen chains with OptionAsync', async () => {
       const chained = opt.andThen((n) => OptionAsync.some(n.toString()))
-      await expect(chained.then((opt) => opt.unwrapOr(''))).resolves.toBe('42')
+      await expect(chained.unwrapOr('')).resolves.toBe('42')
+      const noneChained = opt.andThen(() => OptionAsync.none())
+      await expect(noneChained.unwrapOr('')).resolves.toBe('')
     })
 
     test('filter retains value if predicate passes', async () => {
-      const filtered = opt.filter(async (n) => n > 40)
-      await expect(filtered.then((opt) => opt.unwrapOr(0))).resolves.toBe(42)
-      const filteredOut = opt.filter(async (n) => n > 50)
-      await expect(filteredOut.then((opt) => opt.unwrapOr(0))).resolves.toBe(0)
+      const filtered = opt.filter((n) => n > 40)
+      await expect(filtered.unwrapOr(0)).resolves.toBe(42)
+      const filteredOut = opt.filter((n) => n > 50)
+      await expect(filteredOut.unwrapOr(0)).resolves.toBe(0)
+      const asyncFiltered = opt.filter(async (n) => n > 40)
+      await expect(asyncFiltered.unwrapOr(0)).resolves.toBe(42)
     })
 
     test('zip combines with another Some', async () => {
-      const other = some('hello')
+      const other = Option.some('hello')
       const zipped = opt.zip(other)
-      await expect(zipped.then((opt) => opt.unwrapOr([0, '']))).resolves.toEqual([42, 'hello'])
+      await expect(zipped.unwrapOr([0, ''])).resolves.toEqual([42, 'hello'])
       const asyncOther = OptionAsync.some('async')
       const asyncZipped = opt.zip(asyncOther)
-      await expect(asyncZipped.then((opt) => opt.unwrapOr([0, '']))).resolves.toEqual([42, 'async'])
+      await expect(asyncZipped.unwrapOr([0, ''])).resolves.toEqual([42, 'async'])
       const zippedWithNone = opt.zip(OptionAsync.none<string>())
-      await expect(zippedWithNone.then((opt) => opt.unwrapOr([0, '']))).resolves.toEqual([0, ''])
+      await expect(zippedWithNone.unwrapOr([0, ''])).resolves.toEqual([0, ''])
     })
 
     test('flatten unwraps nested Option', async () => {
-      const nested = OptionAsync.some(some(42))
+      const nested = OptionAsync.some(Option.some(42))
       const flat = nested.flatten()
-      await expect(flat.then((opt) => opt.unwrapOr(0))).resolves.toBe(42)
+      await expect(flat.unwrapOr(0)).resolves.toBe(42)
 
       const innerAsync = OptionAsync.some(42)
       const asyncNested = OptionAsync.some(innerAsync)
       const asyncFlat = asyncNested.flatten()
-      await expect(asyncFlat.then((opt) => opt.unwrapOr(0))).resolves.toBe(42)
+      await expect(asyncFlat.unwrapOr(0)).resolves.toBe(42)
 
-      const noneNested = OptionAsync.some(none())
+      const noneNested = OptionAsync.some(Option.none())
       const noneFlat = noneNested.flatten()
-      await expect(noneFlat.then((opt) => opt.unwrapOr(0))).resolves.toBe(0)
+      await expect(noneFlat.unwrapOr(0)).resolves.toBe(0)
     })
 
     test('orElse returns self', async () => {
-      const alternative = opt.orElse(() => some(99))
-      await expect(alternative.then((opt) => opt.unwrapOr(0))).resolves.toBe(42)
+      const alternative = opt.orElse(() => Option.some(99))
+      await expect(alternative.unwrapOr(0)).resolves.toBe(42)
+      const asyncAlternative = opt.orElse(() => OptionAsync.some(99))
+      await expect(asyncAlternative.unwrapOr(0)).resolves.toBe(42)
     })
 
-    test('unwrapOr returns value', async () => {
+    test('unwrapOr returns value with sync default', async () => {
       await expect(opt.unwrapOr(0)).resolves.toBe(42)
+    })
+
+    test('unwrapOr returns value with async default', async () => {
       await expect(opt.unwrapOr(Promise.resolve(0))).resolves.toBe(42)
     })
 
-    test('unwrapOrElse returns value', async () => {
+    test('unwrapOrElse returns value with sync fn', async () => {
       await expect(opt.unwrapOrElse(() => 0)).resolves.toBe(42)
+    })
+
+    test('unwrapOrElse returns value with async fn', async () => {
       await expect(opt.unwrapOrElse(async () => 0)).resolves.toBe(42)
     })
 
-    test('match executes some branch', async () => {
+    test('match executes some branch with sync fn', async () => {
+      const result = opt.match({
+        some: (value) => `Value: ${value}`,
+        none: () => 'None',
+      })
+      await expect(result).resolves.toBe('Value: 42')
+    })
+
+    test('match executes some branch with async fn', async () => {
       const result = opt.match({
         some: async (value) => `Value: ${value}`,
         none: async () => 'None',
@@ -372,38 +392,45 @@ describe('OptionAsync', () => {
       await expect(result).resolves.toBe('Value: 42')
     })
 
-    test('toResult converts to Ok', async () => {
+    test('toResult converts to Ok with sync error', async () => {
       const result = opt.toResult('error')
-      await expect(result.then((res) => res.isOk())).resolves.toBe(true)
-      await expect(result.then((res) => res.unwrapOr(0))).resolves.toBe(42)
-      const asyncResult = opt.toResult(Promise.resolve('error'))
-      await expect(asyncResult.then((res) => res.isOk())).resolves.toBe(true)
+      await expect(result.isOk()).resolves.toBe(true)
+      await expect(result.unwrapOr(0)).resolves.toBe(42)
+    })
+
+    test('toResult converts to Ok with async error', async () => {
+      const result = opt.toResult(Promise.resolve('error'))
+      await expect(result.isOk()).resolves.toBe(true)
+      await expect(result.unwrapOr(0)).resolves.toBe(42)
     })
 
     test('sequence wraps value in array', async () => {
       const sequenced = opt.sequence()
-      await expect(sequenced.then((opt) => opt.unwrapOr([]))).resolves.toEqual([42])
+      await expect(sequenced.unwrapOr([])).resolves.toEqual([42])
       const arrayOpt = OptionAsync.some([1, 2])
-      await expect(arrayOpt.sequence().then((opt) => opt.unwrapOr([]))).resolves.toEqual([1, 2])
+      await expect(arrayOpt.sequence().unwrapOr([])).resolves.toEqual([1, 2])
     })
 
-    test('tap executes side-effect', async () => {
+    test('tap executes side-effect with sync fn', async () => {
       const fn = jest.fn()
       const result = opt.tap(fn)
-      await expect(result.then((opt) => opt.unwrapOr(0))).resolves.toBe(42)
+      await expect(result.unwrapOr(0)).resolves.toBe(42)
       expect(fn).toHaveBeenCalledWith(42)
-      const asyncFn = jest.fn(async (n: number) => undefined)
-      const asyncResult = opt.tap(asyncFn)
-      await asyncResult
-      expect(asyncFn).toHaveBeenCalledWith(42)
+    })
+
+    test('tap executes side-effect with async fn', async () => {
+      const fn = jest.fn(async (n: number) => undefined)
+      const result = opt.tap(fn)
+      await expect(result.unwrapOr(0)).resolves.toBe(42)
+      expect(fn).toHaveBeenCalledWith(42)
     })
 
     test('pipe chains transformations', async () => {
-      const result = opt.pipe(
+      const result = await opt.pipe(
         (opt) => opt.map((n) => n * 2),
         async (opt) => opt.map((n) => n + 10)
       )
-      await expect(result.then((opt) => opt.unwrapOr(0))).resolves.toBe(94)
+      expect(result.unwrapOr(0)).toBe(94)
     })
   })
 
@@ -426,57 +453,92 @@ describe('OptionAsync', () => {
       await expect(opt.contains(42)).resolves.toBe(false)
     })
 
-    test('map returns None', async () => {
+    test('map returns None with sync fn', async () => {
+      const mapped = opt.map((n) => n * 2)
+      await expect(mapped.isNone()).resolves.toBe(true)
+    })
+
+    test('map returns None with async fn', async () => {
       const mapped = opt.map(async (n) => n * 2)
-      await expect(mapped.then((opt) => opt.isNone())).resolves.toBe(true)
+      await expect(mapped.isNone()).resolves.toBe(true)
     })
 
-    test('andThen returns None', async () => {
-      const chained = opt.andThen((n) => some(n.toString()))
-      await expect(chained.then((opt) => opt.isNone())).resolves.toBe(true)
-      const asyncChained = opt.andThen(() => OptionAsync.some('test'))
-      await expect(asyncChained.then((opt) => opt.isNone())).resolves.toBe(true)
+    test('andThen returns None with Option', async () => {
+      const chained = opt.andThen((n) => Option.some(n.toString()))
+      await expect(chained.isNone()).resolves.toBe(true)
     })
 
-    test('filter returns None', async () => {
+    test('andThen returns None with OptionAsync', async () => {
+      const chained = opt.andThen((n) => OptionAsync.some(n.toString()))
+      await expect(chained.isNone()).resolves.toBe(true)
+    })
+
+    test('filter returns None with sync predicate', async () => {
+      const filtered = opt.filter((n) => n > 40)
+      await expect(filtered.isNone()).resolves.toBe(true)
+    })
+
+    test('filter returns None with async predicate', async () => {
       const filtered = opt.filter(async (n) => n > 40)
-      await expect(filtered.then((opt) => opt.isNone())).resolves.toBe(true)
+      await expect(filtered.isNone()).resolves.toBe(true)
     })
 
-    test('zip returns None', async () => {
-      const other = some('hello')
+    test('zip returns None with sync Option', async () => {
+      const other = Option.some('hello')
       const zipped = opt.zip(other)
-      await expect(zipped.then((opt) => opt.isNone())).resolves.toBe(true)
-      const asyncOther = OptionAsync.some('async')
-      const asyncZipped = opt.zip(asyncOther)
-      await expect(asyncZipped.then((opt) => opt.isNone())).resolves.toBe(true)
+      await expect(zipped.isNone()).resolves.toBe(true)
+    })
+
+    test('zip returns None with async Option', async () => {
+      const other = OptionAsync.some('async')
+      const zipped = opt.zip(other)
+      await expect(zipped.isNone()).resolves.toBe(true)
     })
 
     test('flatten returns None', async () => {
       const flat = opt.flatten()
-      await expect(flat.then((opt) => opt.isNone())).resolves.toBe(true)
+      await expect(flat.isNone()).resolves.toBe(true)
     })
 
-    test('orElse evaluates alternative', async () => {
-      const alternative = opt.orElse(() => some(99))
-      await expect(alternative.then((opt) => opt.unwrapOr(0))).resolves.toBe(99)
-      const asyncAlternative = opt.orElse(() => OptionAsync.some(99))
-      await expect(asyncAlternative.then((opt) => opt.unwrapOr(0))).resolves.toBe(99)
-      const noneAlternative = opt.orElse(() => none() as Option<number>)
-      await expect(noneAlternative.then((opt) => opt.unwrapOr(0))).resolves.toBe(0)
+    test('orElse evaluates sync alternative', async () => {
+      const alternative = opt.orElse(() => Option.some(99))
+      await expect(alternative.unwrapOr(0)).resolves.toBe(99)
+      const noneAlternative = opt.orElse(() => Option.none<number>())
+      await expect(noneAlternative.unwrapOr(0)).resolves.toBe(0)
     })
 
-    test('unwrapOr returns default', async () => {
+    test('orElse evaluates async alternative', async () => {
+      const alternative = opt.orElse(() => OptionAsync.some(99))
+      await expect(alternative.unwrapOr(0)).resolves.toBe(99)
+      const noneAlternative = opt.orElse(() => OptionAsync.none<number>())
+      await expect(noneAlternative.unwrapOr(0)).resolves.toBe(0)
+    })
+
+    test('unwrapOr returns default with sync default', async () => {
       await expect(opt.unwrapOr(0)).resolves.toBe(0)
+    })
+
+    test('unwrapOr returns default with async default', async () => {
       await expect(opt.unwrapOr(Promise.resolve(0))).resolves.toBe(0)
     })
 
-    test('unwrapOrElse evaluates default', async () => {
+    test('unwrapOrElse evaluates default with sync fn', async () => {
       await expect(opt.unwrapOrElse(() => 99)).resolves.toBe(99)
+    })
+
+    test('unwrapOrElse evaluates default with async fn', async () => {
       await expect(opt.unwrapOrElse(async () => 99)).resolves.toBe(99)
     })
 
-    test('match executes none branch', async () => {
+    test('match executes none branch with sync fn', async () => {
+      const result = opt.match({
+        some: (value) => `Value: ${value}`,
+        none: () => 'None',
+      })
+      await expect(result).resolves.toBe('None')
+    })
+
+    test('match executes none branch with async fn', async () => {
       const result = opt.match({
         some: async (value) => `Value: ${value}`,
         none: async () => 'None',
@@ -484,75 +546,119 @@ describe('OptionAsync', () => {
       await expect(result).resolves.toBe('None')
     })
 
-    test('toResult converts to Err', async () => {
+    test('toResult converts to Err with sync error', async () => {
       const result = opt.toResult('error')
-      await expect(result.then((res) => res.isErr())).resolves.toBe(true)
-      await expect(result.then((res) => res.unwrapOr(0))).resolves.toBe(0)
-      const asyncResult = opt.toResult(Promise.resolve('error'))
-      await expect(asyncResult.then((res) => res.isErr())).resolves.toBe(true)
+      await expect(result.isErr()).resolves.toBe(true)
+      await expect(result.unwrapOr(0)).resolves.toBe(0)
+    })
+
+    test('toResult converts to Err with async error', async () => {
+      const result = opt.toResult(Promise.resolve('error'))
+      await expect(result.isErr()).resolves.toBe(true)
+      await expect(result.unwrapOr(0)).resolves.toBe(0)
     })
 
     test('sequence returns empty array', async () => {
       const sequenced = opt.sequence()
-      await expect(sequenced.then((opt) => opt.unwrapOr([]))).resolves.toEqual([])
+      await expect(sequenced.unwrapOr([])).resolves.toEqual([])
     })
 
-    test('tap does not execute side-effect', async () => {
+    test('tap does not execute side-effect with sync fn', async () => {
       const fn = jest.fn()
       const result = opt.tap(fn)
-      await expect(result.then((opt) => opt.isNone())).resolves.toBe(true)
+      await expect(result.isNone()).resolves.toBe(true)
       expect(fn).not.toHaveBeenCalled()
-      const asyncFn = jest.fn(async (n: number) => undefined)
-      const asyncResult = opt.tap(asyncFn)
-      await asyncResult
-      expect(asyncFn).not.toHaveBeenCalled()
+    })
+
+    test('tap does not execute side-effect with async fn', async () => {
+      const fn = jest.fn(async (n: number) => undefined)
+      const result = opt.tap(fn)
+      await expect(result.isNone()).resolves.toBe(true)
+      expect(fn).not.toHaveBeenCalled()
     })
 
     test('pipe chains transformations', async () => {
-      const result = opt.pipe(
+      const result = await opt.pipe(
         (opt) => opt.map((n) => n * 2),
         async (opt) => opt.map((n) => n + 10)
       )
-      await expect(result.then((opt) => opt.unwrapOr(0))).resolves.toBe(0)
+      expect(result.unwrapOr(0)).toBe(0)
     })
   })
 
   describe('Utility Functions', () => {
     describe('from', () => {
-      test('creates Some for non-null value', async () => {
+      test('creates Some for non-null sync value', async () => {
         const opt = OptionAsync.from('hello')
         await expect(opt.unwrapOr('')).resolves.toBe('hello')
-        const asyncOpt = OptionAsync.from(Promise.resolve('async'))
-        await expect(asyncOpt.unwrapOr('')).resolves.toBe('async')
       })
 
-      test('creates None for null or undefined', async () => {
+      test('creates Some for non-null async value', async () => {
+        const opt = OptionAsync.from(Promise.resolve('async'))
+        await expect(opt.unwrapOr('')).resolves.toBe('async')
+      })
+
+      test('creates None for null or undefined sync value', async () => {
         const optNull = OptionAsync.from(null)
         await expect(optNull.isNone()).resolves.toBe(true)
         const optUndefined = OptionAsync.from(undefined)
         await expect(optUndefined.isNone()).resolves.toBe(true)
-        const asyncNull = OptionAsync.from(Promise.resolve(null))
-        await expect(asyncNull.isNone()).resolves.toBe(true)
+      })
+
+      test('creates None for null or undefined async value', async () => {
+        const optNull = OptionAsync.from(Promise.resolve(null))
+        await expect(optNull.isNone()).resolves.toBe(true)
+        const optUndefined = OptionAsync.from(Promise.resolve(undefined))
+        await expect(optUndefined.isNone()).resolves.toBe(true)
       })
     })
 
     describe('try', () => {
-      test('creates Some for successful function', async () => {
+      test('creates Some for successful sync function', async () => {
         const opt = OptionAsync.try(() => 'success')
         await expect(opt.unwrapOr('')).resolves.toBe('success')
-        const asyncOpt = OptionAsync.try(async () => 'async')
-        await expect(asyncOpt.unwrapOr('')).resolves.toBe('async')
       })
 
-      test('creates None for throwing function', async () => {
+      test('creates Some for successful async function', async () => {
+        const opt = OptionAsync.try(async () => 'async')
+        await expect(opt.unwrapOr('')).resolves.toBe('async')
+      })
+
+      test('creates None for throwing sync function', async () => {
         const opt = OptionAsync.try(() => {
           throw new Error('fail')
         })
         await expect(opt.isNone()).resolves.toBe(true)
-        const asyncOpt = OptionAsync.try(async () => {
+      })
+
+      test('creates None for throwing async function', async () => {
+        const opt = OptionAsync.try(async () => {
           throw new Error('fail')
         })
-        await expect(asyncOpt.isNone()).resolves.toBe(true)
+        await expect(opt.isNone()).resolves.toBe(true)
+      })
+
+      test('creates None for rejected promise', async () => {
+        const opt = OptionAsync.try(() => Promise.reject(new Error('fail')))
+        await expect(opt.isNone()).resolves.toBe(true)
+      })
+    })
+
+    describe('isOptionAsync', () => {
+      test('returns true for OptionAsync Some', () => {
+        const opt = OptionAsync.some(42)
+        expect(isOptionAsync(opt)).toBe(true)
+      })
+
+      test('returns true for OptionAsync None', () => {
+        const opt = OptionAsync.none()
+        expect(isOptionAsync(opt)).toBe(true)
+      })
+
+      test('returns false for non-OptionAsync', () => {
+        expect(isOptionAsync(42)).toBe(false)
+        expect(isOptionAsync(Option.some(42))).toBe(false)
+        expect(isOptionAsync(null)).toBe(false)
       })
     })
   })

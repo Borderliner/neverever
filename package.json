@@ -1,6 +1,6 @@
 {
   "name": "neverever",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Easy-to-use & zero-dependency Option<T> and Result<T, E> types for TypeScript",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

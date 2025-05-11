@@ -1,21 +1,5 @@
 // index.ts
-export { Option, OptionAsync, some, none, from, tryOption, isOption, isOptionAsync } from './option'
-export {
-  Result,
-  ResultAsync,
-  ok,
-  err,
-  okAsync,
-  errAsync,
-  isResult,
-  isResultAsync,
-  Ok,
-  Err,
-  safeTry,
-  fromAsyncThrowable,
-  fromThrowable,
-  fromPromise,
-  fromSafePromise,
-} from './result'
+export { Option, Option as O, OptionAsync, OptionAsync as OA, isOption, isOptionAsync } from './option'
+export { Result, Result as R, ResultAsync, ResultAsync as RA, isResult, isResultAsync } from './result'
 export { pipe, unwrapMaybePromise } from './utils'
-export { Unwrap, MaybePromise } from './types'
+export type { Unwrap, MaybePromise, EnsurePromise, ResultLike, OptionLike, IsPromise } from './types'
