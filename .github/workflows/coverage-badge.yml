@@ -37,10 +37,18 @@ jobs:
         uses: jaywcjlove/coverage-badges-cli@main
         with:
           source: coverage/coverage-summary.json
-          output: coverage/badges/coverage.svg
+          output: badges/coverage.svg
           label: Coverage
           style: flat
           jsonPath: total.lines.pct
+
+      - name: Prepare coverage report for deployment
+        run: |
+          # Move lcov-report contents to coverage/ root
+          mv coverage/lcov-report/* coverage/ || echo "No files in lcov-report/ to move"
+          # Move badge to coverage/badges/
+          mkdir -p coverage/badges
+          mv badges/coverage.svg coverage/badges/coverage.svg || echo "Badge file not found"
 
       - name: Configure Git identity
         run: |
