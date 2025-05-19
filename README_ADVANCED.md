@@ -302,4 +302,4 @@ Ensure adherence to monadic laws and type safety in contributions.
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
-Made with  by Mohammadreza Hajianpour
+Made with ❤️ by Mohammadreza Hajianpour

@@ -246,4 +246,4 @@ Want to help improve `neverever`? Here’s how:
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.
-Made with  by Mohammadreza Hajianpour
+Made with ❤️ by Mohammadreza Hajianpour
