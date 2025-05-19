@@ -396,9 +396,9 @@ describe('ResultAsync', () => {
       })
 
       test('creates Err for rejected promise', async () => {
-        const result = ResultAsync.fromSafePromise(Promise.reject('fail'))
+        const result = ResultAsync.fromPromise(Promise.reject('fail'), (e) => `Error: ${e}`)
         await expect(result.isErr()).resolves.toBe(true)
-        await expect(result.match({ ok: () => '', err: (e) => String(e) })).resolves.toBe('fail')
+        await expect(result.match({ ok: () => '', err: (e) => e })).resolves.toBe('Error: fail')
       })
     })
 
