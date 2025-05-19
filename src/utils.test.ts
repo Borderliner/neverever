@@ -1,6 +1,8 @@
 import { pipe, unwrapMaybePromise } from './utils'
-import { Option, OptionAsync } from './option'
-import { Result, ResultAsync } from './result'
+import { Option } from './Option'
+import { OptionAsync } from './OptionAsync'
+import { Result } from './Result'
+import { ResultAsync } from './ResultAsync'
 import { MaybePromise, OptionLike, ResultLike } from './types'
 
 describe('utils', () => {

@@ -1,6 +1,8 @@
 // types.ts
-import { Option, OptionAsync } from './option'
-import { Result, ResultAsync } from './result'
+import { Option } from './Option'
+import { OptionAsync } from './OptionAsync'
+import { Result } from './Result'
+import { ResultAsync } from './ResultAsync'
 
 /**
  * Utility type to extract the inner type of a Promise, Option, or Result.
@@ -23,7 +25,7 @@ export type Unwrap<T> = T extends Promise<infer U>
 export type MaybePromise<T> = T | Promise<T>
 
 /**
- * Utility type to normalize MaybePromise<T> to Promise<T> (unused for now)
+ * Utility type to normalize MaybePromise<T> to Promise<T> (unused in `neverever`)
  */
 export type EnsurePromise<T> = T extends Promise<infer U> ? Promise<U> : Promise<T>
 
