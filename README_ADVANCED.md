@@ -1,5 +1,6 @@
 # neverever - A TypeScript Library for Functional Data Handling
-![Coverage](https://raw.githubusercontent.com/Borderliner/neverever/badges/coverage.svg)
+[![Coverage](https://Borderliner.github.io/neverever/badges/coverage.svg)](https://github.com/Borderliner/neverever/actions)
+[View Coverage Report](https://Borderliner.github.io/neverever/index.html)
 
 `neverever` is a zero-dependency TypeScript library designed for expressive, type-safe data handling in functional programming paradigms. It provides robust implementations of `Option<T>`, `OptionAsync<T>`, `Result<T, E>`, and `ResultAsync<T, E>`, inspired by languages like Rust and Gleam. Built for synchronous and asynchronous workflows, it offers chainable monadic methods, a powerful `pipe` utility, and seamless integration of `MaybePromise<T>` for flexible Promise handling. As a performant alternative to libraries like `neverthrow`, `neverever` eliminates null checks, simplifies error handling, and enables declarative data transformations.
 

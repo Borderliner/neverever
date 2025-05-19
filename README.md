@@ -1,5 +1,6 @@
 # neverever - A TypeScript Library for Safe Data Handling by Adding Option<T> and Result<T, E>
-![Coverage](https://raw.githubusercontent.com/Borderliner/neverever/badges/coverage.svg)
+[![Coverage](https://Borderliner.github.io/neverever/badges/coverage.svg)](https://github.com/Borderliner/neverever/actions)
+[View Coverage Report](https://Borderliner.github.io/neverever/index.html)
 
 *Advanced programmer? [Read this instead](./README_ADVANCED.md).*
 

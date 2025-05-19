@@ -10,6 +10,8 @@ on:
 jobs:
   coverage:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for pushing to gh-pages
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,40 +37,21 @@ jobs:
         uses: jaywcjlove/coverage-badges-cli@main
         with:
           source: coverage/coverage-summary.json
-          output: badges/coverage.svg
+          output: coverage/badges/coverage.svg
           label: Coverage
           style: flat
           jsonPath: total.lines.pct
 
-      - name: Create badges branch if not exists
+      - name: Configure Git identity
         run: |
-          git fetch
-          if ! git rev-parse --verify badges >/dev/null 2>&1; then
-            git checkout --orphan badges
-            git rm -rf .
-            echo '# Badges' > README.md
-            git add README.md
-            git commit -m 'Initialize badges branch'
-            git push origin badges
-            git checkout main
-          fi
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit badge to badges branch
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git fetch
-          git checkout badges
-          mkdir -p badges
-          mv badges/coverage.svg badges/coverage.svg
-          git add badges/coverage.svg
-          git commit -m "Update coverage badge" || echo "No changes to commit"
-          git push origin badges
-
-      - name: Deploy to GitHub Pages (optional)
+      - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         if: github.ref == 'refs/heads/main'
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: badges
+          publish_dir: coverage
           publish_branch: gh-pages
+          force_orphan: true  # Ensures gh-pages is an orphan branch
