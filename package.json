@@ -31,9 +31,5 @@
     "rust",
     "fp",
     "pipeline"
-  ],
-  "jest": {
-    "coverageReporters": ["text", "json-summary", "lcov"],
-    "collectCoverage": true
-  }
+  ]
 }
