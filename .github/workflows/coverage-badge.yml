@@ -1,0 +1,74 @@
+name: Coverage Badge
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests with coverage
+        run: npm test
+
+      - name: Extract coverage percentage
+        id: coverage
+        run: |
+          COVERAGE=$(jq -r '.total.lines.pct' coverage/coverage-summary.json)
+          echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+
+      - name: Generate coverage badge
+        uses: jaywcjlove/coverage-badges-cli@main
+        with:
+          source: coverage/coverage-summary.json
+          output: badges/coverage.svg
+          label: Coverage
+          style: flat
+          jsonPath: total.lines.pct
+
+      - name: Create badges branch if not exists
+        run: |
+          git fetch
+          if ! git rev-parse --verify badges >/dev/null 2>&1; then
+            git checkout --orphan badges
+            git rm -rf .
+            echo '# Badges' > README.md
+            git add README.md
+            git commit -m 'Initialize badges branch'
+            git push origin badges
+            git checkout main
+          fi
+
+      - name: Commit badge to badges branch
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git fetch
+          git checkout badges
+          mkdir -p badges
+          mv badges/coverage.svg badges/coverage.svg
+          git add badges/coverage.svg
+          git commit -m "Update coverage badge" || echo "No changes to commit"
+          git push origin badges
+
+      - name: Deploy to GitHub Pages (optional)
+        uses: peaceiris/actions-gh-pages@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: badges
+          publish_branch: gh-pages

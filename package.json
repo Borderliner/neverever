@@ -1,12 +1,12 @@
 {
   "name": "neverever",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Easy-to-use & zero-dependency Option<T> and Result<T, E> types for TypeScript",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "jest",
+    "test": "jest --coverage",
     "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {
@@ -31,5 +31,9 @@
     "rust",
     "fp",
     "pipeline"
-  ]
+  ],
+  "jest": {
+    "coverageReporters": ["text", "json-summary", "lcov"],
+    "collectCoverage": true
+  }
 }
