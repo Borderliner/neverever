@@ -1,0 +1,4 @@
+# Allow esbuild (a transitive dependency of the build tool, tsup) to run its
+# install script so its platform binary is linked. Required for `pnpm run build`.
+allowBuilds:
+  esbuild: true

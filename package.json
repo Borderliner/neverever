@@ -2,10 +2,32 @@
   "name": "neverever",
   "version": "0.4.1",
   "description": "Easy-to-use & zero-dependency Option<T> and Result<T, E> types for TypeScript",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
     "test": "jest --coverage",
     "prepublishOnly": "pnpm run build"
   },
@@ -15,6 +37,7 @@
     "jest": "^29.7.0",
     "ts-jest": "^29.3.2",
     "ts-node": "^10.9.2",
+    "tsup": "^8.5.1",
     "typescript": "^5.8.3"
   },
   "author": "Mohammadreza Hajianpour <hajianpour.mr@gmail.com>",
