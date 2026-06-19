@@ -3,5 +3,17 @@ export { Option, Option as O, isOption } from './Option'
 export { OptionAsync, OptionAsync as OA, isOptionAsync } from './OptionAsync'
 export { Result, Result as R, isResult } from './Result'
 export { ResultAsync, ResultAsync as RA, isResultAsync } from './ResultAsync'
+export { Ok, Err, Some, None, OkAsync, ErrAsync, SomeAsync, NoneAsync } from './constructors'
 export { pipe, unwrapMaybePromise } from './utils'
-export type { Unwrap, MaybePromise, EnsurePromise, ResultLike, OptionLike, IsPromise } from './types'
+export type {
+  Unwrap,
+  MaybePromise,
+  EnsurePromise,
+  ResultLike,
+  OptionLike,
+  IsPromise,
+  FlattenResult,
+  FlattenResultAsync,
+  FlattenOption,
+  FlattenOptionAsync,
+} from './types'

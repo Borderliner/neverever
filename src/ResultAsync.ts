@@ -2,7 +2,7 @@
 
 import { OptionAsync } from './OptionAsync'
 import { isResult, Result } from './Result'
-import { FlattenResultAsync, MaybePromise } from './types'
+import { FlattenResultAsync, MaybePromise, ResultLike } from './types'
 
 /**
  * A class representing an asynchronous result that is either a success (`Ok`) with a value of type `T` or a failure (`Err`) with an error of type `E`.
@@ -26,6 +26,70 @@ class ResultAsync<T, E> {
    */
   static _fromPromise<T, E>(promise: Promise<Result<T, E>>): ResultAsync<T, E> {
     return new ResultAsync(promise)
+  }
+
+  /**
+   * Makes `ResultAsync` awaitable: `await someResultAsync` resolves to the underlying
+   * synchronous `Result<T, E>`, which you can then `match`/`unwrapOr`/etc. synchronously.
+   *
+   * @example
+   * const res = await ResultAsync.ok<number, string>(42); // Result<number, string>
+   * console.log(res.unwrapOr(0)); // 42
+   */
+  then<TResult1 = Result<T, E>, TResult2 = never>(
+    onfulfilled?: ((value: Result<T, E>) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected)
+  }
+
+  /**
+   * Attaches a rejection handler to the underlying Promise. Mirrors `Promise.prototype.catch`.
+   */
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null
+  ): Promise<Result<T, E> | TResult> {
+    return this.promise.catch(onrejected)
+  }
+
+  /**
+   * Attaches a settlement handler to the underlying Promise. Mirrors `Promise.prototype.finally`.
+   */
+  finally(onfinally?: (() => void) | null): Promise<Result<T, E>> {
+    return this.promise.finally(onfinally)
+  }
+
+  /**
+   * Combines an array of `Result`/`ResultAsync`/`Promise<Result>` values into a single
+   * `ResultAsync` of an array. Resolves to the first `Err` encountered, otherwise `Ok` with
+   * every value in order.
+   *
+   * @example
+   * const combined = ResultAsync.combine([ResultAsync.ok(1), Result.ok(2), ResultAsync.ok(3)]);
+   * console.log(await combined.unwrapOr([])); // [1, 2, 3]
+   */
+  static combine<T, E>(results: Array<ResultLike<T, E>>): ResultAsync<T[], E> {
+    return ResultAsync._fromPromise(
+      Promise.all(
+        results.map((r) => (r instanceof ResultAsync ? r.promise : Promise.resolve(r)))
+      ).then((resolved) => Result.combine(resolved))
+    )
+  }
+
+  /**
+   * Like {@link ResultAsync.combine}, but accumulates every `Err` instead of stopping at the
+   * first. Resolves to `Ok` with all values, or `Err` with an array of all errors.
+   *
+   * @example
+   * const combined = ResultAsync.combineWithAllErrors([ResultAsync.ok<number, string>(1), ResultAsync.err<number, string>('a')]);
+   * console.log(await combined.match({ ok: () => [], err: (e) => e })); // ['a']
+   */
+  static combineWithAllErrors<T, E>(results: Array<ResultLike<T, E>>): ResultAsync<T[], E[]> {
+    return ResultAsync._fromPromise(
+      Promise.all(
+        results.map((r) => (r instanceof ResultAsync ? r.promise : Promise.resolve(r)))
+      ).then((resolved) => Result.combineWithAllErrors(resolved))
+    )
   }
 
   /**
@@ -480,6 +544,45 @@ class ResultAsync<T, E> {
         err: (error) => Promise.resolve(fn(error)),
       })
     )
+  }
+
+  /**
+   * Unsafe escape hatch: resolves to the `Ok` value, or rejects if the `ResultAsync` is `Err`.
+   * Prefer {@link ResultAsync.unwrapOr}/{@link ResultAsync.match} in production code.
+   *
+   * @throws If the `ResultAsync` resolves to `Err`.
+   */
+  unwrap(): Promise<T> {
+    return this.promise.then((res) => res.unwrap())
+  }
+
+  /**
+   * Unsafe escape hatch: resolves to the `Err` value, or rejects if the `ResultAsync` is `Ok`.
+   *
+   * @throws If the `ResultAsync` resolves to `Ok`.
+   */
+  unwrapErr(): Promise<E> {
+    return this.promise.then((res) => res.unwrapErr())
+  }
+
+  /**
+   * Unsafe escape hatch: resolves to the `Ok` value, or rejects with `message` if it is `Err`.
+   *
+   * @param message The error message to throw with when the `ResultAsync` is `Err`.
+   * @throws If the `ResultAsync` resolves to `Err`.
+   */
+  expect(message: string): Promise<T> {
+    return this.promise.then((res) => res.expect(message))
+  }
+
+  /**
+   * Unsafe escape hatch: resolves to the `Err` value, or rejects with `message` if it is `Ok`.
+   *
+   * @param message The error message to throw with when the `ResultAsync` is `Ok`.
+   * @throws If the `ResultAsync` resolves to `Ok`.
+   */
+  expectErr(message: string): Promise<E> {
+    return this.promise.then((res) => res.expectErr(message))
   }
 
   /**

@@ -2,7 +2,7 @@
 
 import { OptionAsync } from './OptionAsync'
 import { Result } from './Result'
-import { FlattenOption, MaybePromise } from './types'
+import { FlattenOption, MaybePromise, OptionLike } from './types'
 
 /**
  * A class representing an optional value that may or may not be present.
@@ -85,6 +85,27 @@ class Option<T> {
   }
 
   /**
+   * Combines an array of `Option`s into a single `Option` of an array.
+   * Returns `None` if any element is `None`, otherwise `Some` with every value in order.
+   *
+   * @template T The type of the values.
+   * @param options The array of `Option`s to combine.
+   * @returns `Some` with all values, or `None`.
+   *
+   * @example
+   * console.log(Option.combine([Option.some(1), Option.some(2)]).unwrapOr([])); // [1, 2]
+   * console.log(Option.combine([Option.some(1), Option.none<number>()]).unwrapOr([])); // []
+   */
+  static combine<T>(options: Array<Option<T>>): Option<T[]> {
+    const values: T[] = []
+    for (const option of options) {
+      if (option.isNone()) return Option.none()
+      values.push(option.value!)
+    }
+    return new Option<T[]>(true, values)
+  }
+
+  /**
    * Checks if the Option is `Some` (contains a value).
    *
    * @returns `true` if the Option is `Some`, `false` if it is `None`.
@@ -143,8 +164,14 @@ class Option<T> {
    * const mapped = some.map(x => x * 2); // Some(84)
    * const none = Option.none<number>().map(x => x * 2); // None
    */
-  map<U>(fn: (value: T) => U): Option<U> {
-    return this.isSomeFlag ? new Option(true, fn(this.value!)) : Option.none()
+  map<U>(fn: (value: T) => Promise<U>): OptionAsync<U>
+  map<U>(fn: (value: T) => U): Option<U>
+  map<U>(fn: (value: T) => MaybePromise<U>): Option<U> | OptionAsync<U> {
+    if (!this.isSomeFlag) return Option.none()
+    const out = fn(this.value!)
+    return out instanceof Promise
+      ? OptionAsync._fromPromise(out.then((v) => Option.some(v)))
+      : new Option(true, out)
   }
 
   /**
@@ -162,8 +189,14 @@ class Option<T> {
    * console.log(some.andThen(toOption)); // Some(84)
    * console.log(none.andThen(toOption)); // None
    */
-  andThen<U>(fn: (value: T) => Option<U>): Option<U> {
-    return this.isSomeFlag ? fn(this.value!) : Option.none()
+  andThen<U>(fn: (value: T) => Option<U>): Option<U>
+  andThen<U>(fn: (value: T) => OptionAsync<U> | Promise<Option<U>>): OptionAsync<U>
+  andThen<U>(fn: (value: T) => OptionLike<U>): Option<U> | OptionAsync<U> {
+    if (!this.isSomeFlag) return Option.none()
+    const next = fn(this.value!)
+    if (next instanceof OptionAsync) return next
+    if (next instanceof Promise) return OptionAsync._fromPromise(next)
+    return next
   }
 
   /**
@@ -179,8 +212,15 @@ class Option<T> {
    * console.log(some.filter(x => x < 40)); // None
    * console.log(none.filter(x => x > 40)); // None
    */
-  filter(predicate: (value: T) => boolean): Option<T> {
-    return this.isSomeFlag && predicate(this.value!) ? this : Option.none()
+  filter(predicate: (value: T) => Promise<boolean>): OptionAsync<T>
+  filter(predicate: (value: T) => boolean): Option<T>
+  filter(predicate: (value: T) => MaybePromise<boolean>): Option<T> | OptionAsync<T> {
+    if (!this.isSomeFlag) return this
+    const verdict = predicate(this.value!)
+    if (verdict instanceof Promise) {
+      return OptionAsync._fromPromise(verdict.then((ok) => (ok ? (this as Option<T>) : Option.none<T>())))
+    }
+    return verdict ? this : Option.none()
   }
 
   /**
@@ -198,14 +238,19 @@ class Option<T> {
    * console.log(some1.zip(some2)); // Some([42, "hello"])
    * console.log(some1.zip(none)); // None
    */
-  zip<U>(other: Option<U>): Option<[T, U]> {
+  zip<U>(other: Option<U>): Option<[T, U]>
+  zip<U>(other: OptionAsync<U> | Promise<Option<U>>): OptionAsync<[T, U]>
+  zip<U>(other: OptionLike<U>): Option<[T, U]> | OptionAsync<[T, U]> {
+    if (other instanceof OptionAsync || other instanceof Promise) {
+      return this.toAsync().zip(other)
+    }
     return this.match({
       some: (value1) =>
         other.match({
-          some: (value2) => Option.some([value1, value2]),
-          none: () => Option.none(),
+          some: (value2) => Option.some([value1, value2] as [T, U]),
+          none: () => Option.none<[T, U]>(),
         }),
-      none: () => Option.none(),
+      none: () => Option.none<[T, U]>(),
     })
   }
 
@@ -239,8 +284,14 @@ class Option<T> {
    * console.log(some.orElse(() => Option.some(0))); // Some(42)
    * console.log(none.orElse(() => Option.some(0))); // Some(0)
    */
-  orElse(fn: () => Option<T>): Option<T> {
-    return this.isSomeFlag ? this : fn()
+  orElse(fn: () => Option<T>): Option<T>
+  orElse(fn: () => OptionAsync<T> | Promise<Option<T>>): OptionAsync<T>
+  orElse(fn: () => OptionLike<T>): Option<T> | OptionAsync<T> {
+    if (this.isSomeFlag) return this
+    const next = fn()
+    if (next instanceof OptionAsync) return next
+    if (next instanceof Promise) return OptionAsync._fromPromise(next)
+    return next
   }
 
   /**
@@ -273,6 +324,37 @@ class Option<T> {
    */
   unwrapOrElse(fn: () => T): T {
     return this.isSomeFlag ? this.value! : fn()
+  }
+
+  /**
+   * Unsafe escape hatch: returns the `Some` value, or throws if the Option is `None`.
+   * Prefer {@link Option.unwrapOr}/{@link Option.match} in production code.
+   *
+   * @returns The contained `Some` value.
+   * @throws If the Option is `None`.
+   *
+   * @example
+   * console.log(Option.some(42).unwrap()); // 42
+   * Option.none().unwrap(); // throws
+   */
+  unwrap(): T {
+    if (this.isSomeFlag) return this.value!
+    throw new Error('Called unwrap() on a None value')
+  }
+
+  /**
+   * Unsafe escape hatch: returns the `Some` value, or throws an `Error` with `message` if `None`.
+   *
+   * @param message The error message to throw with when the Option is `None`.
+   * @returns The contained `Some` value.
+   * @throws If the Option is `None`.
+   *
+   * @example
+   * console.log(Option.some(42).expect('must be present')); // 42
+   */
+  expect(message: string): T {
+    if (this.isSomeFlag) return this.value!
+    throw new Error(message)
   }
 
   /**
@@ -359,9 +441,12 @@ class Option<T> {
    * some.tap(x => console.log(`Value: ${x}`)); // Logs "Value: 42"
    * console.log(some); // Some(42)
    */
-  tap(fn: (value: T) => void): Option<T> {
-    if (this.isSomeFlag) fn(this.value!)
-    return this
+  tap(fn: (value: T) => Promise<void>): OptionAsync<T>
+  tap(fn: (value: T) => void): Option<T>
+  tap(fn: (value: T) => MaybePromise<void>): Option<T> | OptionAsync<T> {
+    if (!this.isSomeFlag) return this
+    const out = fn(this.value!)
+    return out instanceof Promise ? OptionAsync._fromPromise(out.then(() => this as Option<T>)) : this
   }
 
   /**

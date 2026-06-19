@@ -2,7 +2,7 @@
 
 import { Option } from './Option'
 import { ResultAsync } from './ResultAsync'
-import { FlattenResult, MaybePromise } from './types'
+import { FlattenResult, MaybePromise, ResultLike } from './types'
 
 /**
  * A class representing a value that is either a success (`Ok`) with a value of type `T` or a failure (`Err`) with an error of type `E`.
@@ -108,6 +108,52 @@ class Result<T, E> {
   }
 
   /**
+   * Combines an array of `Result`s into a single `Result` of an array.
+   * Returns the first `Err` encountered, otherwise `Ok` with every value in order.
+   *
+   * @template T The type of the success values.
+   * @template E The type of the error values.
+   * @param results The array of `Result`s to combine.
+   * @returns `Ok` with all values, or the first `Err`.
+   *
+   * @example
+   * console.log(Result.combine([Result.ok(1), Result.ok(2)]).unwrapOr([])); // [1, 2]
+   * console.log(Result.combine([Result.ok<number, string>(1), Result.err<number, string>('x')]).unwrapOr([])); // []
+   */
+  static combine<T, E>(results: Array<Result<T, E>>): Result<T[], E> {
+    const values: T[] = []
+    for (const result of results) {
+      if (result.isErr()) return new Result<T[], E>(false, undefined, result.error!)
+      values.push(result.value!)
+    }
+    return new Result<T[], E>(true, values, undefined)
+  }
+
+  /**
+   * Like {@link Result.combine}, but accumulates every `Err` instead of stopping at the first.
+   * Returns `Ok` with all values when every `Result` is `Ok`, otherwise `Err` with all errors.
+   *
+   * @template T The type of the success values.
+   * @template E The type of the error values.
+   * @param results The array of `Result`s to combine.
+   * @returns `Ok` with all values, or `Err` with an array of all errors.
+   *
+   * @example
+   * const r = Result.combineWithAllErrors([Result.ok<number, string>(1), Result.err<number, string>('a'), Result.err<number, string>('b')]);
+   * console.log(r.match({ ok: () => [], err: (e) => e })); // ['a', 'b']
+   */
+  static combineWithAllErrors<T, E>(results: Array<Result<T, E>>): Result<T[], E[]> {
+    const values: T[] = []
+    const errors: E[] = []
+    for (const result of results) {
+      result.match({ ok: (v) => values.push(v), err: (e) => errors.push(e) })
+    }
+    return errors.length > 0
+      ? new Result<T[], E[]>(false, undefined, errors)
+      : new Result<T[], E[]>(true, values, undefined)
+  }
+
+  /**
    * Checks if the `Result` is `Ok` (contains a value).
    *
    * @returns `true` if the `Result` is `Ok`, `false` if it is `Err`.
@@ -173,10 +219,14 @@ class Result<T, E> {
    * const err = Result.err<number, string>("Failed");
    * console.log(err.map(x => x * 2).unwrapOr(0)); // 0
    */
-  map<U>(fn: (value: T) => U): Result<U, E> {
-    return this.isOkFlag
-      ? new Result<U, E>(true, fn(this.value!), undefined)
-      : new Result<U, E>(false, undefined, this.error)
+  map<U>(fn: (value: T) => Promise<U>): ResultAsync<U, E>
+  map<U>(fn: (value: T) => U): Result<U, E>
+  map<U>(fn: (value: T) => MaybePromise<U>): Result<U, E> | ResultAsync<U, E> {
+    if (!this.isOkFlag) return new Result<U, E>(false, undefined, this.error)
+    const out = fn(this.value!)
+    return out instanceof Promise
+      ? ResultAsync._fromPromise(out.then((v) => Result.ok<U, E>(v)))
+      : new Result<U, E>(true, out, undefined)
   }
 
   /**
@@ -195,10 +245,14 @@ class Result<T, E> {
    * const ok = Result.ok<number, string>(42);
    * console.log(ok.mapErr(e => `Error: ${e}`).unwrapOr(0)); // 42
    */
-  mapErr<F>(fn: (error: E) => F): Result<T, F> {
-    return this.isOkFlag
-      ? new Result<T, F>(true, this.value, undefined)
-      : new Result<T, F>(false, undefined, fn(this.error!))
+  mapErr<F>(fn: (error: E) => Promise<F>): ResultAsync<T, F>
+  mapErr<F>(fn: (error: E) => F): Result<T, F>
+  mapErr<F>(fn: (error: E) => MaybePromise<F>): Result<T, F> | ResultAsync<T, F> {
+    if (this.isOkFlag) return new Result<T, F>(true, this.value, undefined)
+    const out = fn(this.error!)
+    return out instanceof Promise
+      ? ResultAsync._fromPromise(out.then((e) => Result.err<T, F>(e)))
+      : new Result<T, F>(false, undefined, out)
   }
 
   /**
@@ -218,8 +272,14 @@ class Result<T, E> {
    * const err = Result.err<number, string>("Failed");
    * console.log(err.andThen(x => Result.ok<string, string>(`Value: ${x}`)).unwrapOr("None")); // "None"
    */
-  andThen<U, F>(fn: (value: T) => Result<U, F>): Result<U, E | F> {
-    return this.isOkFlag ? fn(this.value!) : new Result<U, E | F>(false, undefined, this.error)
+  andThen<U, F>(fn: (value: T) => ResultAsync<U, F> | Promise<Result<U, F>>): ResultAsync<U, E | F>
+  andThen<U, F>(fn: (value: T) => Result<U, F>): Result<U, E | F>
+  andThen<U, F>(fn: (value: T) => ResultLike<U, F>): Result<U, E | F> | ResultAsync<U, E | F> {
+    if (!this.isOkFlag) return new Result<U, E | F>(false, undefined, this.error)
+    const next = fn(this.value!)
+    if (next instanceof ResultAsync) return next as ResultAsync<U, E | F>
+    if (next instanceof Promise) return ResultAsync._fromPromise(next as Promise<Result<U, E | F>>)
+    return next as Result<U, E | F>
   }
 
   /**
@@ -237,8 +297,14 @@ class Result<T, E> {
    * const ok = Result.ok<number, string>(42);
    * console.log(ok.orElse(e => Result.ok<number, string>(0)).unwrapOr(-1)); // 42
    */
-  orElse<F>(fn: (error: E) => Result<T, F>): Result<T, E | F> {
-    return this.isOkFlag ? new Result<T, E | F>(true, this.value!, undefined) : fn(this.error!)
+  orElse<F>(fn: (error: E) => Result<T, F>): Result<T, E | F>
+  orElse<F>(fn: (error: E) => ResultAsync<T, F> | Promise<Result<T, F>>): ResultAsync<T, E | F>
+  orElse<F>(fn: (error: E) => ResultLike<T, F>): Result<T, E | F> | ResultAsync<T, E | F> {
+    if (this.isOkFlag) return new Result<T, E | F>(true, this.value!, undefined)
+    const next = fn(this.error!)
+    if (next instanceof ResultAsync) return next as ResultAsync<T, E | F>
+    if (next instanceof Promise) return ResultAsync._fromPromise(next as Promise<Result<T, E | F>>)
+    return next as Result<T, E | F>
   }
 
   /**
@@ -259,12 +325,20 @@ class Result<T, E> {
    * const err = Result.err<number, string>("Failed");
    * console.log(err.filter(x => x > 40, "Too small").unwrapOr(0)); // 0
    */
-  filter(predicate: (value: T) => boolean, error: E): Result<T, E> {
-    return this.isOkFlag && predicate(this.value!)
-      ? this
-      : this.isOkFlag
-      ? new Result<T, E>(false, undefined, error)
-      : this
+  filter(predicate: (value: T) => Promise<boolean>, error: MaybePromise<E>): ResultAsync<T, E>
+  filter(predicate: (value: T) => boolean, error: E): Result<T, E>
+  filter(
+    predicate: (value: T) => MaybePromise<boolean>,
+    error: MaybePromise<E>
+  ): Result<T, E> | ResultAsync<T, E> {
+    if (!this.isOkFlag) return this
+    const verdict = predicate(this.value!)
+    if (verdict instanceof Promise) {
+      return ResultAsync._fromPromise(
+        verdict.then(async (ok) => (ok ? (this as Result<T, E>) : Result.err<T, E>(await Promise.resolve(error))))
+      )
+    }
+    return verdict ? this : new Result<T, E>(false, undefined, error as E)
   }
 
   /**
@@ -285,7 +359,11 @@ class Result<T, E> {
    * const err = Result.err<string, string>("Failed");
    * console.log(ok1.zip(err).unwrapOr([0, ""])); // [0, ""]
    */
-  zip<U, F>(other: Result<U, F>): Result<[T, U], E | F> {
+  zip<U, F>(other: ResultAsync<U, F> | Promise<Result<U, F>>): ResultAsync<[T, U], E | F>
+  zip<U, F>(other: Result<U, F>): Result<[T, U], E | F>
+  zip<U, F>(other: ResultLike<U, F>): Result<[T, U], E | F> | ResultAsync<[T, U], E | F> {
+    if (other instanceof ResultAsync) return this.toAsync().zip(other)
+    if (other instanceof Promise) return this.toAsync().zip(ResultAsync._fromPromise(other))
     return this.match({
       ok: (value1) =>
         other.match({
@@ -358,6 +436,67 @@ class Result<T, E> {
   }
 
   /**
+   * Unsafe escape hatch: returns the `Ok` value, or throws if the `Result` is `Err`.
+   * Prefer {@link Result.unwrapOr}/{@link Result.match} in production code.
+   *
+   * @returns The contained `Ok` value.
+   * @throws If the `Result` is `Err`.
+   *
+   * @example
+   * console.log(Result.ok(42).unwrap()); // 42
+   * Result.err('boom').unwrap(); // throws
+   */
+  unwrap(): T {
+    if (this.isOkFlag) return this.value!
+    throw new Error(`Called unwrap() on an Err value: ${String(this.error)}`)
+  }
+
+  /**
+   * Unsafe escape hatch: returns the `Err` value, or throws if the `Result` is `Ok`.
+   *
+   * @returns The contained `Err` value.
+   * @throws If the `Result` is `Ok`.
+   *
+   * @example
+   * console.log(Result.err('boom').unwrapErr()); // "boom"
+   * Result.ok(42).unwrapErr(); // throws
+   */
+  unwrapErr(): E {
+    if (!this.isOkFlag) return this.error!
+    throw new Error(`Called unwrapErr() on an Ok value: ${String(this.value)}`)
+  }
+
+  /**
+   * Unsafe escape hatch: returns the `Ok` value, or throws an `Error` with `message` if `Err`.
+   *
+   * @param message The error message to throw with when the `Result` is `Err`.
+   * @returns The contained `Ok` value.
+   * @throws If the `Result` is `Err`.
+   *
+   * @example
+   * console.log(Result.ok(42).expect('must have a value')); // 42
+   */
+  expect(message: string): T {
+    if (this.isOkFlag) return this.value!
+    throw new Error(message)
+  }
+
+  /**
+   * Unsafe escape hatch: returns the `Err` value, or throws an `Error` with `message` if `Ok`.
+   *
+   * @param message The error message to throw with when the `Result` is `Ok`.
+   * @returns The contained `Err` value.
+   * @throws If the `Result` is `Ok`.
+   *
+   * @example
+   * console.log(Result.err('boom').expectErr('must be an error')); // "boom"
+   */
+  expectErr(message: string): E {
+    if (!this.isOkFlag) return this.error!
+    throw new Error(message)
+  }
+
+  /**
    * Pattern-matches the `Result`, executing the appropriate branch based on whether it is `Ok` or `Err`.
    *
    * @template U The type of the result.
@@ -414,8 +553,14 @@ class Result<T, E> {
    * const ok = Result.ok<number, string>(42);
    * console.log(ok.recover(e => e.length).unwrapOr(0)); // 42
    */
-  recover(fn: (error: E) => T): Result<T, E> {
-    return this.isOkFlag ? this : new Result<T, E>(true, fn(this.error!), undefined)
+  recover(fn: (error: E) => Promise<T>): ResultAsync<T, E>
+  recover(fn: (error: E) => T): Result<T, E>
+  recover(fn: (error: E) => MaybePromise<T>): Result<T, E> | ResultAsync<T, E> {
+    if (this.isOkFlag) return this
+    const out = fn(this.error!)
+    return out instanceof Promise
+      ? ResultAsync._fromPromise(out.then((v) => Result.ok<T, E>(v)))
+      : new Result<T, E>(true, out, undefined)
   }
 
   /**
@@ -457,9 +602,14 @@ class Result<T, E> {
    * const err = Result.err<number, string>("Failed");
    * err.tap(x => console.log(`Value: ${x}`)); // No log
    */
-  tap(fn: (value: T) => void): Result<T, E> {
-    if (this.isOkFlag) fn(this.value!)
-    return this
+  tap(fn: (value: T) => Promise<void>): ResultAsync<T, E>
+  tap(fn: (value: T) => void): Result<T, E>
+  tap(fn: (value: T) => MaybePromise<void>): Result<T, E> | ResultAsync<T, E> {
+    if (!this.isOkFlag) return this
+    const out = fn(this.value!)
+    return out instanceof Promise
+      ? ResultAsync._fromPromise(out.then(() => this as Result<T, E>))
+      : this
   }
 
   /**
@@ -477,9 +627,14 @@ class Result<T, E> {
    * const ok = Result.ok<number, string>(42);
    * ok.tapErr(e => console.log(`Error: ${e}`)); // No log
    */
-  tapErr(fn: (error: E) => void): Result<T, E> {
-    if (!this.isOkFlag) fn(this.error!)
-    return this
+  tapErr(fn: (error: E) => Promise<void>): ResultAsync<T, E>
+  tapErr(fn: (error: E) => void): Result<T, E>
+  tapErr(fn: (error: E) => MaybePromise<void>): Result<T, E> | ResultAsync<T, E> {
+    if (this.isOkFlag) return this
+    const out = fn(this.error!)
+    return out instanceof Promise
+      ? ResultAsync._fromPromise(out.then(() => this as Result<T, E>))
+      : this
   }
 
   /**

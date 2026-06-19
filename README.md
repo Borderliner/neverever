@@ -44,6 +44,25 @@ Then, import the tools you need in your TypeScript file:
 import { Option, Result } from 'neverever';
 ```
 
+### A shorter way to create them
+
+Instead of `Result.ok(...)` / `Option.some(...)`, you can use the short constructors
+`Ok`, `Err`, `Some`, and `None` (plus `OkAsync`, `ErrAsync`, `SomeAsync`, `NoneAsync` for
+async). They read nicely and figure out the types for you:
+
+```typescript
+import { Ok, Err, Some, None } from 'neverever';
+
+Ok(42);       // a successful Result
+Err('Oops');  // a failed Result
+Some('Alice'); // an Option with a value
+None();        // an empty Option
+```
+
+> Working with async (Promises)? `OptionAsync`/`ResultAsync` are **awaitable** — just
+> `await` one to get back a normal `Option`/`Result`. And if you give `map`, `andThen`, etc.
+> an `async` function, the chain automatically switches to async for you. No special steps.
+
 ## Core Concepts for Beginners
 
 ### Option: Handling Missing Values
@@ -216,6 +235,10 @@ Here are some key methods you’ll use a lot:
   - `map(fn)`: Transform the success value.
   - `mapErr(fn)`: Transform the error message.
   - `toOption()`: Turn a `Result` into an `Option`, ignoring the error.
+
+- **Handy extras**:
+  - `Result.combine([...])` / `Option.combine([...])`: Combine an array of results/options into one (fails or empties if any do).
+  - `unwrap()` / `unwrapErr()` / `expect(message)`: Grab the value directly — these **throw** if it isn’t there, so use them in tests or quick scripts, not production paths.
 
 ## Tips for Beginners
 

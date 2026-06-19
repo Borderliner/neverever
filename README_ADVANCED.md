@@ -48,6 +48,80 @@ import { Option, Result, OptionAsync, ResultAsync, pipe } from 'neverever';
 - **`MaybePromise<T>`**: A type alias for `T | Promise<T>`, allowing methods to accept both synchronous and asynchronous inputs.
 - **`Unwrap<T>`**: A type utility to extract the inner type from `Promise`, `Option`, or `Result`, useful for flattening nested structures.
 
+## Ergonomic API
+
+`neverever` is designed so you rarely write generics or think about the sync/async split.
+
+### Rust-style constructors
+
+Free-standing `Ok`, `Err`, `Some`, `None` (and `OkAsync`, `ErrAsync`, `SomeAsync`,
+`NoneAsync`) let inference do the work — the missing side widens through the chain:
+
+```typescript
+import { Ok, Err, Some, None } from 'neverever';
+
+Ok(42);        // Result<number, never>
+Err('boom');   // Result<never, string>
+Some(42);      // Option<number>
+None<number>(); // Option<number>
+
+const parsed = Ok(5).andThen((n) => (n > 0 ? Ok(n) : Err('non-positive'))); // Result<number, string>
+```
+
+### Awaitable async types
+
+`ResultAsync`/`OptionAsync` are `PromiseLike`: `await` one to get the plain
+`Result`/`Option`. You no longer wrap functions in `Promise<ResultAsync<...>>` — just return
+the `ResultAsync` and `await` it at the edge.
+
+```typescript
+import { ResultAsync } from 'neverever';
+
+function fetchUser(id: number): ResultAsync<User, string> {
+  return ResultAsync.fromPromise(api.getUser(id), () => 'request failed');
+}
+
+const result = await fetchUser(1);          // Result<User, string>
+console.log(result.match({ ok: (u) => u.name, err: (e) => e }));
+```
+
+### Auto-promotion (one fluent chain, sync or async)
+
+Hand any combinator an async callback and the chain transparently becomes a `ResultAsync`/
+`OptionAsync` — no `.toAsync()` ceremony. Pure-sync chains stay sync (no needless `await`):
+
+```typescript
+import { Some } from 'neverever';
+
+const name = await Some(rawId)
+  .map((id) => Number(id))            // sync
+  .map(async (id) => fetchUser(id))   // ← becomes OptionAsync from here on
+  .andThen((u) => (u.active ? Some(u.name) : None<string>()))
+  .unwrapOr('anonymous');
+
+// still fully synchronous — no await:
+const trimmed = Some(' hi ').map((s) => s.trim()).unwrapOr('');
+```
+
+> Note: on an `Err`/`None` that short-circuits an async-typed chain, terminal accessors
+> resolve synchronously under the hood. Always consume them with `await` (the supported
+> form) rather than calling `.then()` on the returned value directly.
+
+### Combining and escape hatches
+
+```typescript
+import { Ok, Err, Result, ResultAsync } from 'neverever';
+
+Result.combine([Ok(1), Ok(2), Ok(3)]);                       // Ok([1, 2, 3])
+Result.combine([Ok(1), Err('x'), Ok(3)]);                    // Err('x')  (first error)
+Result.combineWithAllErrors([Err('a'), Err('b')]);           // Err(['a', 'b'])
+await ResultAsync.combine([ResultAsync.ok(1), Ok(2)]);       // Ok([1, 2])
+
+Ok(42).unwrap();          // 42        (throws on Err)
+Err('boom').unwrapErr();  // 'boom'    (throws on Ok)
+Ok(42).expect('must exist'); // 42     (throws with your message on Err)
+```
+
 ## Usage
 
 Below are advanced examples showcasing the monadic and compositional capabilities of `neverever`. All examples assume the library is imported.
@@ -254,17 +328,21 @@ console.log(value); // "test"
 
 - **`OptionLike<T>` and `ResultLike<T, E>`**:
 
+Because `OptionAsync`/`ResultAsync` are awaitable (they resolve to the synchronous
+`Option`/`Result`), every `OptionLike`/`ResultLike` variant — sync, async, or a raw
+`Promise` — can be unwrapped with a single `await`:
+
 ```typescript
-import { OptionLike, ResultLike, OptionAsync, ResultAsync } from 'neverever';
+import { OptionLike, ResultLike, OptionAsync, Result } from 'neverever';
 
 async function processOption<T>(opt: OptionLike<T>): Promise<T | null> {
-  const option = await (opt instanceof OptionAsync ? opt.promise : opt);
-  return option.unwrapOr(null);
+  const option = await opt; // Option<T>, for Option | OptionAsync | Promise<Option>
+  return option.match({ some: (v) => v, none: () => null });
 }
 
 async function processResult<T, E>(res: ResultLike<T, E>): Promise<T | null> {
-  const result = await (res instanceof ResultAsync ? res.promise : res);
-  return result.unwrapOr(null);
+  const result = await res; // Result<T, E>, for Result | ResultAsync | Promise<Result>
+  return result.match({ ok: (v) => v, err: () => null });
 }
 
 console.log(await processOption(OptionAsync.some(42))); // 42

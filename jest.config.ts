@@ -36,6 +36,9 @@ const config: Config.InitialOptions = {
   coverageReporters: ['text', 'json-summary', 'lcov'],
   collectCoverage: true,
   coverageDirectory: 'coverage',
+
+  // The barrel file is pure re-exports (validated by `tsc`); exclude it from coverage.
+  coveragePathIgnorePatterns: ['/node_modules/', '/dist/', '<rootDir>/src/index.ts'],
 }
 
 export default config

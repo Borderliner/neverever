@@ -81,26 +81,26 @@ type PipeReturn<T, Fs extends Array<(arg: any) => any>> = HasPromise<Fs> extends
  * console.log(await mixedResult); // 94
  *
  * // Example 4: Pipeline with Option
- * import { some, none } from 'neverever';
+ * import { Some, None } from 'neverever';
  * const optionResult = pipe(
- *   some(42),
+ *   Some(42),
  *   (opt: Option<number>) => opt.map(n => n * 2),
  *   (opt: Option<number>) => opt.map(n => n + 10)
  * );
  * console.log(optionResult.unwrapOr(0)); // 94
  *
- * // Example 5: Pipeline with Option returning none
+ * // Example 5: Pipeline with Option returning None
  * const noneResult = pipe(
- *   none() as Option<number>,
+ *   None<number>(),
  *   (opt: Option<number>) => opt.map(n => n * 2),
  *   (opt: Option<number>) => opt.map(n => n + 10)
  * );
  * console.log(noneResult.unwrapOr(0)); // 0
  *
  * // Example 6: Pipeline with Result
- * import { ok, err } from 'neverever';
+ * import { Ok, Err } from 'neverever';
  * const resultPipeline = pipe(
- *   ok<string, string>('data'),
+ *   Ok<string, string>('data'),
  *   (res: Result<string, string>) => res.map(s => s.toUpperCase()),
  *   (res: Result<string, string>) => res.map(s => s + '!')
  * );
@@ -200,7 +200,7 @@ function pipe<T, Fs extends Array<(arg: any) => any>>(value: T, ...fns: Fs): Pip
  * @example
  * ```typescript
  * import { unwrapMaybePromise } from 'neverever';
- * import { some } from 'neverever';
+ * import { Some } from 'neverever';
  *
  * // Example 1: Unwrapping a synchronous value
  * const syncValue: number = 42;
@@ -213,7 +213,7 @@ function pipe<T, Fs extends Array<(arg: any) => any>>(value: T, ...fns: Fs): Pip
  * console.log(await asyncResult); // 'hello'
  *
  * // Example 3: Unwrapping a MaybePromise containing an Option
- * const optionValue: MaybePromise<Option<number>> = some(42);
+ * const optionValue: MaybePromise<Option<number>> = Some(42);
  * const optionResult = unwrapMaybePromise(optionValue);
  * console.log((await optionResult).unwrapOr(0)); // 42
  *

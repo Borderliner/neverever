@@ -15,6 +15,67 @@ class OptionAsync<T> {
   private constructor(private readonly promise: Promise<Option<T>>) {}
 
   /**
+   * Wraps an existing `Promise<Option<T>>` in an `OptionAsync`.
+   *
+   * Internal plumbing used by sibling types (e.g. `Option`'s auto-promoting methods) to
+   * construct an `OptionAsync` across module boundaries. Prefer the public factories
+   * (`some`, `none`, `from`, `try`) in application code.
+   *
+   * @internal
+   */
+  static _fromPromise<T>(promise: Promise<Option<T>>): OptionAsync<T> {
+    return new OptionAsync(promise)
+  }
+
+  /**
+   * Makes `OptionAsync` awaitable: `await someOptionAsync` resolves to the underlying
+   * synchronous `Option<T>`, which you can then `match`/`unwrapOr`/etc. synchronously.
+   *
+   * @example
+   * const opt = await OptionAsync.some(42); // Option<number>
+   * console.log(opt.unwrapOr(0)); // 42
+   */
+  then<TResult1 = Option<T>, TResult2 = never>(
+    onfulfilled?: ((value: Option<T>) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ): Promise<TResult1 | TResult2> {
+    return this.promise.then(onfulfilled, onrejected)
+  }
+
+  /**
+   * Attaches a rejection handler to the underlying Promise. Mirrors `Promise.prototype.catch`.
+   */
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null
+  ): Promise<Option<T> | TResult> {
+    return this.promise.catch(onrejected)
+  }
+
+  /**
+   * Attaches a settlement handler to the underlying Promise. Mirrors `Promise.prototype.finally`.
+   */
+  finally(onfinally?: (() => void) | null): Promise<Option<T>> {
+    return this.promise.finally(onfinally)
+  }
+
+  /**
+   * Combines an array of `Option`/`OptionAsync`/`Promise<Option>` values into a single
+   * `OptionAsync` of an array. Resolves to `None` if any element is `None`, otherwise `Some`
+   * with every value in order.
+   *
+   * @example
+   * const combined = OptionAsync.combine([OptionAsync.some(1), Option.some(2)]);
+   * console.log(await combined.unwrapOr([])); // [1, 2]
+   */
+  static combine<T>(options: Array<OptionLike<T>>): OptionAsync<T[]> {
+    return OptionAsync._fromPromise(
+      Promise.all(
+        options.map((o) => (o instanceof OptionAsync ? o.promise : Promise.resolve(o)))
+      ).then((resolved) => Option.combine(resolved))
+    )
+  }
+
+  /**
    * Creates an `OptionAsync` containing a value (`Some`).
    *
    * @template T The type of the value.
@@ -373,6 +434,26 @@ class OptionAsync<T> {
         none: () => Promise.resolve(fn()),
       })
     )
+  }
+
+  /**
+   * Unsafe escape hatch: resolves to the `Some` value, or rejects if the `OptionAsync` is `None`.
+   * Prefer {@link OptionAsync.unwrapOr}/{@link OptionAsync.match} in production code.
+   *
+   * @throws If the `OptionAsync` resolves to `None`.
+   */
+  unwrap(): Promise<T> {
+    return this.promise.then((opt) => opt.unwrap())
+  }
+
+  /**
+   * Unsafe escape hatch: resolves to the `Some` value, or rejects with `message` if `None`.
+   *
+   * @param message The error message to throw with when the `OptionAsync` is `None`.
+   * @throws If the `OptionAsync` resolves to `None`.
+   */
+  expect(message: string): Promise<T> {
+    return this.promise.then((opt) => opt.expect(message))
   }
 
   /**
