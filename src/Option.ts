@@ -2,7 +2,7 @@
 
 import { OptionAsync } from './OptionAsync'
 import { Result } from './Result'
-import { MaybePromise, Unwrap } from './types'
+import { FlattenOption, MaybePromise } from './types'
 
 /**
  * A class representing an optional value that may or may not be present.
@@ -221,10 +221,10 @@ class Option<T> {
    * console.log(Option.some(42).flatten()); // Some(42)
    * console.log(Option.none().flatten()); // None
    */
-  flatten(): Option<Unwrap<T>> {
-    if (!this.isSomeFlag) return Option.none()
+  flatten(): FlattenOption<T> {
+    if (!this.isSomeFlag) return Option.none() as FlattenOption<T>
     const inner = this.value
-    return inner instanceof Option ? inner.flatten() : new Option<Unwrap<T>>(true, inner as Unwrap<T>)
+    return (inner instanceof Option ? inner.flatten() : new Option<unknown>(true, inner)) as FlattenOption<T>
   }
 
   /**
@@ -343,8 +343,8 @@ class Option<T> {
    */
   sequence(): Option<T[]> {
     return this.isSomeFlag
-      ? new Option<T[]>(true, Array.isArray(this.value) ? (this.value as T[]) : [this.value!])
-      : new Option(true, [])
+      ? new Option<T[]>(true, Array.isArray(this.value) ? [...this.value] : [this.value!])
+      : new Option<T[]>(true, [])
   }
 
   /**

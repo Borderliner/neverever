@@ -271,3 +271,23 @@ describe('Option', () => {
     })
   })
 })
+
+describe('Option regression fixes', () => {
+  test('flatten deeply unwraps multiple nested Some layers', () => {
+    const nested = Option.some(Option.some(Option.some(42)))
+    expect(nested.flatten().unwrapOr(0)).toBe(42)
+  })
+
+  test('flatten on a nested None yields None', () => {
+    const nested = Option.some(Option.none<number>())
+    expect(nested.flatten().isNone()).toBe(true)
+  })
+
+  test('sequence returns a fresh array that does not alias the wrapped value', () => {
+    const source = [1, 2, 3]
+    const arr = Option.some(source).sequence().unwrapOr([]) as unknown as number[]
+    expect(arr).not.toBe(source)
+    arr.push(4)
+    expect(source).toEqual([1, 2, 3])
+  })
+})

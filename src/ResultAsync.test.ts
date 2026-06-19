@@ -430,3 +430,44 @@ describe('ResultAsync', () => {
     })
   })
 })
+
+describe('ResultAsync regression fixes', () => {
+  test('unwrapOr resolves a Promise default to its value, not a thenable', async () => {
+    const value = await ResultAsync.err<number, string>('failed').unwrapOr(Promise.resolve(100))
+    expect(value).toBe(100)
+    expect(typeof (value as unknown as { then?: unknown }).then).not.toBe('function')
+  })
+
+  test('unwrapOr ignores the default when Ok', async () => {
+    await expect(ResultAsync.ok<number, string>(42).unwrapOr(Promise.resolve(100))).resolves.toBe(42)
+  })
+
+  test('flatten deeply unwraps nested ResultAsync and Result layers', async () => {
+    const nested = ResultAsync.ok<ResultAsync<Result<number, string>, string>, string>(
+      ResultAsync.ok<Result<number, string>, string>(Result.ok<number, string>(42))
+    )
+    await expect(nested.flatten().unwrapOr(0)).resolves.toBe(42)
+  })
+
+  test('flatten surfaces an inner Err', async () => {
+    const nested = ResultAsync.ok<Result<number, string>, string>(Result.err<number, string>('inner'))
+    await expect(nested.flatten().match({ ok: () => '', err: (e) => e })).resolves.toBe('inner')
+  })
+
+  test('sequence returns a fresh array that does not alias the wrapped value', async () => {
+    const source = [1, 2, 3]
+    const arr = (await ResultAsync.ok<number[], string>(source).sequence().unwrapOr([])) as unknown as number[]
+    expect(arr).not.toBe(source)
+    arr.push(4)
+    expect(source).toEqual([1, 2, 3])
+  })
+
+  test('the public constructor is encapsulated; the internal factory still works', async () => {
+    // @ts-expect-error - constructor is private; sibling types use _fromPromise instead
+    const direct = () => new ResultAsync<number, string>(Promise.resolve(Result.ok(1)))
+    expect(direct).toBeInstanceOf(Function)
+
+    const viaFactory = ResultAsync._fromPromise(Promise.resolve(Result.ok<number, string>(7)))
+    await expect(viaFactory.unwrapOr(0)).resolves.toBe(7)
+  })
+})

@@ -299,3 +299,37 @@ describe('Result', () => {
     })
   })
 })
+
+describe('Result regression fixes', () => {
+  test('flatten deeply unwraps multiple nested Ok layers', () => {
+    const nested = Result.ok<Result<Result<number, string>, string>, string>(
+      Result.ok<Result<number, string>, string>(Result.ok<number, string>(42))
+    )
+    const flat = nested.flatten()
+    expect(flat.isOk()).toBe(true)
+    expect(flat.unwrapOr(0)).toBe(42)
+  })
+
+  test('flatten surfaces an inner Err from a nested Result', () => {
+    const nested = Result.ok<Result<number, string>, string>(Result.err<number, string>('inner'))
+    const flat = nested.flatten()
+    expect(flat.isErr()).toBe(true)
+    expect(flat.match({ ok: () => '', err: (e) => e })).toBe('inner')
+  })
+
+  test('sequence returns a fresh array that does not alias the wrapped value', () => {
+    const source = [1, 2, 3]
+    const arr = Result.ok<number[], string>(source).sequence().unwrapOr([]) as unknown as number[]
+    expect(arr).not.toBe(source)
+    expect(arr).toEqual([1, 2, 3])
+    arr.push(4)
+    expect(source).toEqual([1, 2, 3])
+  })
+
+  test('sequence on Err preserves the error and defaults to empty', () => {
+    const sequenced = Result.err<number, string>('failed').sequence()
+    expect(sequenced.isErr()).toBe(true)
+    expect(sequenced.match({ ok: () => 'ok', err: (e) => e })).toBe('failed')
+    expect(sequenced.unwrapOr([])).toEqual([])
+  })
+})

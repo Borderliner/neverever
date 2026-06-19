@@ -3,7 +3,7 @@
 import { Result } from './Result'
 import { ResultAsync } from './ResultAsync'
 import { Option, isOption } from './Option'
-import { MaybePromise, OptionLike, Unwrap } from './types'
+import { FlattenOptionAsync, MaybePromise, OptionLike } from './types'
 
 /**
  * A class representing an asynchronous optional value that may or may not be present.
@@ -11,7 +11,7 @@ import { MaybePromise, OptionLike, Unwrap } from './types'
  *
  * @template T The type of the value contained in the OptionAsync.
  */
-class OptionAsync<T> implements OptionAsync<T> {
+class OptionAsync<T> {
   private constructor(private readonly promise: Promise<Option<T>>) {}
 
   /**
@@ -289,19 +289,19 @@ class OptionAsync<T> implements OptionAsync<T> {
    * const none = OptionAsync.none();
    * console.log(await none.flatten().unwrapOr(0)); // 0
    */
-  flatten(): OptionAsync<Unwrap<T>> {
+  flatten(): FlattenOptionAsync<T> {
     return new OptionAsync(
       this.promise.then((opt) =>
         opt.match({
           some: (value) => {
             if (value instanceof OptionAsync) return value.flatten().promise
             if (isOption(value)) return Promise.resolve(value.flatten())
-            return Promise.resolve(Option.some(value as Unwrap<T>))
+            return Promise.resolve(Option.some(value))
           },
           none: () => Promise.resolve(Option.none()),
         })
-      )
-    )
+      ) as Promise<Option<unknown>>
+    ) as FlattenOptionAsync<T>
   }
 
   /**
@@ -420,13 +420,13 @@ class OptionAsync<T> implements OptionAsync<T> {
    *
    * const none = OptionAsync.none<number>();
    * const errResult = none.toResult(Promise.resolve("No value"));
-   * console.log(await errResult.unwrapErr()); // "No value"
+   * console.log(await errResult.match({ ok: () => "", err: (e) => e })); // "No value"
    */
   toResult<E>(error: MaybePromise<E>): ResultAsync<T, E> {
-    return new ResultAsync(
+    return ResultAsync._fromPromise(
       this.promise.then((opt) =>
-        opt.match({
-          some: (value) => Promise.resolve(Result.ok(value)),
+        opt.match<MaybePromise<Result<T, E>>>({
+          some: (value) => Result.ok(value),
           none: () => Promise.resolve(error).then((err) => Result.err(err)),
         })
       )
@@ -454,7 +454,7 @@ class OptionAsync<T> implements OptionAsync<T> {
     return new OptionAsync<T[]>(
       this.promise.then((opt) =>
         opt.match({
-          some: (value) => Option.some(Array.isArray(value) ? value : ([value] as T[])),
+          some: (value) => Option.some(Array.isArray(value) ? [...value] : ([value] as T[])),
           none: () => Option.some([] as T[]),
         })
       )

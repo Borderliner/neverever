@@ -43,3 +43,38 @@ export type OptionLike<T> = Option<T> | OptionAsync<T> | Promise<Option<T>>
  * Utility type to represent a value that is either a Result, ResultAsync, or a Promise resolving to a Result.
  */
 export type ResultLike<T, E> = Result<T, E> | ResultAsync<T, E> | Promise<Result<T, E>>
+
+/**
+ * Recursively computes the result of flattening a (possibly deeply) nested `Result`.
+ * Each nested layer's error type is unioned into the resulting error type, mirroring the
+ * recursive runtime behaviour of `Result.flatten`.
+ */
+export type FlattenResult<T, E> = T extends Result<infer U, infer F> ? FlattenResult<U, E | F> : Result<T, E>
+
+/**
+ * Recursively computes the result of flattening a (possibly deeply) nested `ResultAsync`.
+ * Nested `ResultAsync` and `Result` layers are unwrapped and their error types unioned,
+ * mirroring the recursive runtime behaviour of `ResultAsync.flatten`.
+ */
+export type FlattenResultAsync<T, E> = T extends ResultAsync<infer U, infer F>
+  ? FlattenResultAsync<U, E | F>
+  : T extends Result<infer U, infer F>
+  ? FlattenResultAsync<U, E | F>
+  : ResultAsync<T, E>
+
+/**
+ * Recursively computes the result of flattening a (possibly deeply) nested `Option`,
+ * mirroring the recursive runtime behaviour of `Option.flatten`.
+ */
+export type FlattenOption<T> = T extends Option<infer U> ? FlattenOption<U> : Option<T>
+
+/**
+ * Recursively computes the result of flattening a (possibly deeply) nested `OptionAsync`.
+ * Nested `OptionAsync` and `Option` layers are unwrapped, mirroring the recursive runtime
+ * behaviour of `OptionAsync.flatten`.
+ */
+export type FlattenOptionAsync<T> = T extends OptionAsync<infer U>
+  ? FlattenOptionAsync<U>
+  : T extends Option<infer U>
+  ? FlattenOptionAsync<U>
+  : OptionAsync<T>

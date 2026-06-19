@@ -391,3 +391,35 @@ describe('OptionAsync', () => {
     })
   })
 })
+
+describe('OptionAsync regression fixes', () => {
+  test('toResult yields Ok for Some', async () => {
+    const result = OptionAsync.some(42).toResult('No value')
+    await expect(result.isOk()).resolves.toBe(true)
+    await expect(result.unwrapOr(0)).resolves.toBe(42)
+  })
+
+  test('toResult yields Err for None', async () => {
+    const result = OptionAsync.none<number>().toResult('No value')
+    await expect(result.isErr()).resolves.toBe(true)
+    await expect(result.match({ ok: () => '', err: (e) => e })).resolves.toBe('No value')
+  })
+
+  test('toResult supports an async error for None', async () => {
+    const result = OptionAsync.none<number>().toResult(Promise.resolve('async error'))
+    await expect(result.match({ ok: () => '', err: (e) => e })).resolves.toBe('async error')
+  })
+
+  test('flatten deeply unwraps nested OptionAsync and Option layers', async () => {
+    const nested = OptionAsync.some(OptionAsync.some(Option.some(42)))
+    await expect(nested.flatten().unwrapOr(0)).resolves.toBe(42)
+  })
+
+  test('sequence returns a fresh array that does not alias the wrapped value', async () => {
+    const source = [1, 2, 3]
+    const arr = (await OptionAsync.some(source).sequence().unwrapOr([])) as unknown as number[]
+    expect(arr).not.toBe(source)
+    arr.push(4)
+    expect(source).toEqual([1, 2, 3])
+  })
+})

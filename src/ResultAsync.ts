@@ -2,7 +2,7 @@
 
 import { OptionAsync } from './OptionAsync'
 import { isResult, Result } from './Result'
-import { MaybePromise, Unwrap } from './types'
+import { FlattenResultAsync, MaybePromise } from './types'
 
 /**
  * A class representing an asynchronous result that is either a success (`Ok`) with a value of type `T` or a failure (`Err`) with an error of type `E`.
@@ -11,8 +11,22 @@ import { MaybePromise, Unwrap } from './types'
  * @template T The type of the success value.
  * @template E The type of the error value.
  */
-class ResultAsync<T, E> implements ResultAsync<T, E> {
-  constructor(private readonly promise: Promise<Result<T, E>>) {}
+class ResultAsync<T, E> {
+  private constructor(private readonly promise: Promise<Result<T, E>>) {}
+
+  /**
+   * Wraps an existing `Promise<Result<T, E>>` in a `ResultAsync`.
+   *
+   * This is internal plumbing used by sibling types (e.g. `Result.toAsync`,
+   * `OptionAsync.toResult`) to construct a `ResultAsync` across module boundaries.
+   * Prefer the public factories (`ok`, `err`, `from`, `try`, `fromPromise`,
+   * `fromSafePromise`) in application code.
+   *
+   * @internal
+   */
+  static _fromPromise<T, E>(promise: Promise<Result<T, E>>): ResultAsync<T, E> {
+    return new ResultAsync(promise)
+  }
 
   /**
    * Creates a `ResultAsync` representing a successful outcome (`Ok`) with a value.
@@ -196,6 +210,11 @@ class ResultAsync<T, E> implements ResultAsync<T, E> {
   /**
    * Transforms the value in an `Ok` `ResultAsync` using the provided function.
    * Returns the original `Err` if the `ResultAsync` resolves to `Err`.
+   *
+   * `map` is for infallible transforms: if `fn` throws or returns a rejecting Promise,
+   * the error is not captured in the `Err` channel (there is no value of type `E` to use) and
+   * instead rejects the underlying Promise. Use {@link ResultAsync.andThen} with
+   * {@link ResultAsync.try}/{@link ResultAsync.fromPromise} for transforms that may fail.
    *
    * @template U The type of the transformed value.
    * @param fn The function to transform the value, which may return a value or Promise.
@@ -406,19 +425,19 @@ class ResultAsync<T, E> implements ResultAsync<T, E> {
    * const err = ResultAsync.err<number, string>("Failed");
    * console.log(await err.flatten().unwrapOr(0)); // 0
    */
-  flatten(): ResultAsync<Unwrap<T>, E> {
+  flatten(): FlattenResultAsync<T, E> {
     return new ResultAsync(
       this.promise.then((res) =>
         res.match({
           ok: async (value) => {
             if (value instanceof ResultAsync) return value.flatten().promise
             if (isResult(value)) return value.flatten()
-            return Result.ok(value as Unwrap<T>)
+            return Result.ok(value)
           },
-          err: async (error) => Result.err<Unwrap<T>, E>(error),
+          err: async (error) => Result.err<unknown, E>(error),
         })
-      )
-    )
+      ) as Promise<Result<unknown, E>>
+    ) as FlattenResultAsync<T, E>
   }
 
   /**
@@ -438,7 +457,7 @@ class ResultAsync<T, E> implements ResultAsync<T, E> {
    * console.log(await asyncDefault); // 100
    */
   unwrapOr(defaultValue: MaybePromise<T>): Promise<T> {
-    return this.promise.then((res) => res.unwrapOr(Promise.resolve(defaultValue) as T))
+    return Promise.all([this.promise, Promise.resolve(defaultValue)]).then(([res, def]) => res.unwrapOr(def))
   }
 
   /**
@@ -534,7 +553,7 @@ class ResultAsync<T, E> implements ResultAsync<T, E> {
     return new ResultAsync<T[], E>(
       this.promise.then((res) =>
         res.match({
-          ok: (value) => Result.ok<T[], E>(Array.isArray(value) ? value : [value]),
+          ok: (value) => Result.ok<T[], E>(Array.isArray(value) ? [...value] : [value]),
           err: (error) => Result.err<T[], E>(error),
         })
       )

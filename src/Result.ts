@@ -2,7 +2,7 @@
 
 import { Option } from './Option'
 import { ResultAsync } from './ResultAsync'
-import { MaybePromise, Unwrap } from './types'
+import { FlattenResult, MaybePromise } from './types'
 
 /**
  * A class representing a value that is either a success (`Ok`) with a value of type `T` or a failure (`Err`) with an error of type `E`.
@@ -13,8 +13,6 @@ import { MaybePromise, Unwrap } from './types'
  */
 class Result<T, E> {
   private constructor(private readonly isOkFlag: boolean, private readonly value?: T, private readonly error?: E) {}
-
-  private static readonly ERR = new Result<never, never>(false, undefined, undefined)
 
   /**
    * Creates a `Result` representing a successful outcome (`Ok`) with a value.
@@ -302,6 +300,8 @@ class Result<T, E> {
    * Flattens a nested `Result` into a single `Result`.
    * If the `Result` is `Ok` and contains another `Result`, it recursively flattens it.
    *
+   * Nested errors are preserved: flattening a `Result<Result<T, F>, E>` yields `Result<T, E | F>`.
+   *
    * @returns A flattened `Result`.
    *
    * @example
@@ -314,10 +314,13 @@ class Result<T, E> {
    * const err = Result.err<number, string>("Failed");
    * console.log(err.flatten().unwrapOr(0)); // 0
    */
-  flatten(): Result<Unwrap<T>, E> {
-    if (!this.isOkFlag) return new Result<Unwrap<T>, E>(false, undefined, this.error)
+  flatten(): FlattenResult<T, E> {
+    if (!this.isOkFlag) return new Result<unknown, E>(false, undefined, this.error) as FlattenResult<T, E>
     const inner = this.value
-    return inner instanceof Result ? inner.flatten() : new Result<Unwrap<T>, E>(true, inner as Unwrap<T>, undefined)
+    return (inner instanceof Result ? inner.flatten() : new Result<unknown, E>(true, inner, undefined)) as FlattenResult<
+      T,
+      E
+    >
   }
 
   /**
@@ -434,9 +437,9 @@ class Result<T, E> {
    */
   sequence(): Result<T[], E> {
     if (this.isOkFlag) {
-      return new Result<T[], E>(true, Array.isArray(this.value) ? this.value : [this.value!], undefined)
+      return new Result<T[], E>(true, Array.isArray(this.value) ? [...this.value] : [this.value!], undefined)
     }
-    return new Result(false, [], this.error!)
+    return new Result<T[], E>(false, undefined, this.error!)
   }
 
   /**
@@ -494,7 +497,10 @@ class Result<T, E> {
    * console.log(await asyncErr.unwrapOr(0)); // 0
    */
   toAsync(): ResultAsync<T, E> {
-    return new ResultAsync(Promise.resolve(this))
+    return this.match({
+      ok: (value) => ResultAsync.ok<T, E>(value),
+      err: (error) => ResultAsync.err<T, E>(error),
+    })
   }
 }
 
