@@ -237,8 +237,24 @@ Here are some key methods you’ll use a lot:
   - `toOption()`: Turn a `Result` into an `Option`, ignoring the error.
 
 - **Handy extras**:
-  - `Result.combine([...])` / `Option.combine([...])`: Combine an array of results/options into one (fails or empties if any do).
+  - `Result.combine([...])` / `Option.combine([...])`: Combine several results/options into one (also works with a `{ named: ... }` object).
+  - `mapOr(default, fn)` / `mapOrElse(onErr, fn)`: Transform the value and fall back in a single step.
   - `unwrap()` / `unwrapErr()` / `expect(message)`: Grab the value directly — these **throw** if it isn’t there, so use them in tests or quick scripts, not production paths.
+
+### Checking and reading in one go
+
+After `isOk()` / `isSome()` (or `isErr()`), TypeScript lets you read the value safely:
+
+```typescript
+const r = parseConfig(); // Result<Config, string>
+if (r.isOk()) {
+  console.log(r.value);  // TypeScript knows this is a Config here
+} else {
+  console.log(r.error);  // ...and a string here
+}
+```
+
+Tip: `console.log` prints them nicely too — `Ok(42)`, `Some("hi")`, `None`.
 
 ## Tips for Beginners
 

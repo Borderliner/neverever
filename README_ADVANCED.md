@@ -107,19 +107,69 @@ const trimmed = Some(' hi ').map((s) => s.trim()).unwrapOr('');
 > resolve synchronously under the hood. Always consume them with `await` (the supported
 > form) rather than calling `.then()` on the returned value directly.
 
-### Combining and escape hatches
+### Type narrowing
+
+`isOk`/`isErr` (and `isSome`/`isNone`) are type guards. After a check, the contained value is
+accessible and correctly typed — no `match`/`unwrapOr` ceremony:
+
+```typescript
+const r: Result<Config, string> = parseConfig();
+if (r.isOk()) {
+  use(r.value);   // value: Config
+} else {
+  log(r.error);   // error: string
+}
+```
+
+`value`/`error` are also readable directly as `T | undefined` / `E | undefined` for quick checks.
+
+### Combining (tuples & records)
+
+`combine` preserves heterogeneous tuple types and also accepts a record:
+
+```typescript
+import { Ok, Err, Result } from 'neverever';
+
+Result.combine([Ok(1), Ok('a'), Ok(true)]);          // Result<[number, string, boolean], never>
+Result.combine({ id: Ok(1), name: Ok('a') });        // Result<{ id: number; name: string }, never>
+Result.combine([Ok(1), Err('x'), Ok(3)]);            // Err('x')  (first error)
+Result.combineWithAllErrors([Err('a'), Err('b')]);   // Err(['a', 'b'])
+await ResultAsync.combine([ResultAsync.ok(1), Ok('a')]); // Ok([1, 'a'])  (mixes sync/async)
+```
+
+### Extract-and-transform, escape hatches, and reusable safe functions
 
 ```typescript
 import { Ok, Err, Result, ResultAsync } from 'neverever';
 
-Result.combine([Ok(1), Ok(2), Ok(3)]);                       // Ok([1, 2, 3])
-Result.combine([Ok(1), Err('x'), Ok(3)]);                    // Err('x')  (first error)
-Result.combineWithAllErrors([Err('a'), Err('b')]);           // Err(['a', 'b'])
-await ResultAsync.combine([ResultAsync.ok(1), Ok(2)]);       // Ok([1, 2])
+// map + default in one step
+Result.ok<number, string>(2).mapOr(0, (x) => x * 10);                 // 20
+Result.err<number, string>('e').mapOrElse((e) => e.length, (x) => x); // 1
 
-Ok(42).unwrap();          // 42        (throws on Err)
-Err('boom').unwrapErr();  // 'boom'    (throws on Ok)
-Ok(42).expect('must exist'); // 42     (throws with your message on Err)
+// unsafe accessors (throw) — for tests/scripts
+Ok(42).unwrap();             // 42        (throws on Err)
+Err('boom').unwrapErr();     // 'boom'    (throws on Ok)
+Ok(42).expect('must exist'); // 42        (throws with your message on Err)
+
+// wrap a throwing function into a reusable safe one
+const safeParse = Result.fromThrowable(JSON.parse, (e) => `bad json: ${e}`);
+safeParse('{"a":1}'); // Ok({ a: 1 })
+const safeFetch = ResultAsync.fromThrowable((u: string) => fetch(u).then((r) => r.json()), () => 'failed');
+
+// side effects without breaking the chain (aliases: inspect / inspectErr)
+Ok(1).inspect((v) => console.log('got', v)).map((v) => v + 1);
+```
+
+### Debug-friendly output
+
+`Result`/`Option` print compactly via `toString()`, Node's `util.inspect`, and `toJSON()`:
+
+```typescript
+String(Ok(42));            // "Ok(42)"
+String(Err('boom'));       // 'Err("boom")'
+String(Some(1));           // "Some(1)"
+String(None());            // "None"
+JSON.stringify(Ok(42));    // '{"type":"Ok","value":42}'
 ```
 
 ## Usage

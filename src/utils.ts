@@ -230,4 +230,19 @@ function unwrapMaybePromise<T>(value: MaybePromise<T>): Promise<T> {
   return Promise.resolve(value)
 }
 
-export { pipe, unwrapMaybePromise }
+/**
+ * Formats a contained value for debug output (used by `toString` / Node's inspect hook).
+ * Strings are quoted, plain objects are JSON-stringified, everything else uses `String()`.
+ * @internal
+ */
+function display(value: unknown): string {
+  if (typeof value === 'string') return JSON.stringify(value)
+  if (value === null || typeof value !== 'object') return String(value)
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+export { pipe, unwrapMaybePromise, display }

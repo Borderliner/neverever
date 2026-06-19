@@ -2,7 +2,7 @@
 
 import { OptionAsync } from './OptionAsync'
 import { isResult, Result } from './Result'
-import { FlattenResultAsync, MaybePromise, ResultLike } from './types'
+import { CombineOks, CombineOksObject, FlattenResultAsync, MaybePromise, ResultErrType, ResultLike } from './types'
 
 /**
  * A class representing an asynchronous result that is either a success (`Ok`) with a value of type `T` or a failure (`Err`) with an error of type `E`.
@@ -64,15 +64,27 @@ class ResultAsync<T, E> {
    * `ResultAsync` of an array. Resolves to the first `Err` encountered, otherwise `Ok` with
    * every value in order.
    *
+   * Accepts a tuple/array (tuple element types preserved) or a record of `Result`-likes.
+   *
    * @example
-   * const combined = ResultAsync.combine([ResultAsync.ok(1), Result.ok(2), ResultAsync.ok(3)]);
-   * console.log(await combined.unwrapOr([])); // [1, 2, 3]
+   * const combined = ResultAsync.combine([ResultAsync.ok(1), Result.ok('a')]);
+   * console.log(await combined.unwrapOr(['', ''])); // [1, 'a']  (typed [number, string])
    */
-  static combine<T, E>(results: Array<ResultLike<T, E>>): ResultAsync<T[], E> {
+  static combine<T extends readonly ResultLike<unknown, unknown>[] | []>(
+    results: T
+  ): ResultAsync<CombineOks<T>, ResultErrType<T[number]>>
+  static combine<T extends Record<string, ResultLike<unknown, unknown>>>(
+    results: T
+  ): ResultAsync<CombineOksObject<T>, ResultErrType<T[keyof T]>>
+  static combine(
+    results: ReadonlyArray<ResultLike<unknown, unknown>> | Record<string, ResultLike<unknown, unknown>>
+  ): ResultAsync<unknown, unknown> {
     return ResultAsync._fromPromise(
-      Promise.all(
-        results.map((r) => (r instanceof ResultAsync ? r.promise : Promise.resolve(r)))
-      ).then((resolved) => Result.combine(resolved))
+      ResultAsync.resolveAll(results).then((settled) =>
+        Array.isArray(settled)
+          ? Result.combine(settled as Result<unknown, unknown>[])
+          : Result.combine(settled as Record<string, Result<unknown, unknown>>)
+      )
     )
   }
 
@@ -84,11 +96,40 @@ class ResultAsync<T, E> {
    * const combined = ResultAsync.combineWithAllErrors([ResultAsync.ok<number, string>(1), ResultAsync.err<number, string>('a')]);
    * console.log(await combined.match({ ok: () => [], err: (e) => e })); // ['a']
    */
-  static combineWithAllErrors<T, E>(results: Array<ResultLike<T, E>>): ResultAsync<T[], E[]> {
+  static combineWithAllErrors<T extends readonly ResultLike<unknown, unknown>[] | []>(
+    results: T
+  ): ResultAsync<CombineOks<T>, ResultErrType<T[number]>[]>
+  static combineWithAllErrors<T extends Record<string, ResultLike<unknown, unknown>>>(
+    results: T
+  ): ResultAsync<CombineOksObject<T>, ResultErrType<T[keyof T]>[]>
+  static combineWithAllErrors(
+    results: ReadonlyArray<ResultLike<unknown, unknown>> | Record<string, ResultLike<unknown, unknown>>
+  ): ResultAsync<unknown, unknown[]> {
     return ResultAsync._fromPromise(
-      Promise.all(
-        results.map((r) => (r instanceof ResultAsync ? r.promise : Promise.resolve(r)))
-      ).then((resolved) => Result.combineWithAllErrors(resolved))
+      ResultAsync.resolveAll(results).then((settled) =>
+        Array.isArray(settled)
+          ? Result.combineWithAllErrors(settled as Result<unknown, unknown>[])
+          : Result.combineWithAllErrors(settled as Record<string, Result<unknown, unknown>>)
+      )
+    )
+  }
+
+  /** Resolves every `ResultLike` in an array/record to a synchronous `Result`, preserving shape. @internal */
+  private static resolveAll(
+    results: ReadonlyArray<ResultLike<unknown, unknown>> | Record<string, ResultLike<unknown, unknown>>
+  ): Promise<Result<unknown, unknown>[] | Record<string, Result<unknown, unknown>>> {
+    const toPromise = (r: ResultLike<unknown, unknown>): Promise<Result<unknown, unknown>> =>
+      r instanceof ResultAsync ? r.promise : Promise.resolve(r)
+    if (Array.isArray(results)) {
+      return Promise.all(results.map(toPromise))
+    }
+    const keys = Object.keys(results)
+    return Promise.all(keys.map((k) => toPromise((results as Record<string, ResultLike<unknown, unknown>>)[k]))).then(
+      (resolved) => {
+        const out: Record<string, Result<unknown, unknown>> = {}
+        keys.forEach((k, i) => (out[k] = resolved[i]))
+        return out
+      }
     )
   }
 
@@ -219,6 +260,24 @@ class ResultAsync<T, E> {
    */
   static fromSafePromise<T, E = unknown>(promise: Promise<T>): ResultAsync<T, E> {
     return new ResultAsync(promise.then((value) => Result.ok<T, E>(value)).catch((e) => Result.err<T, E>(e)))
+  }
+
+  /**
+   * Wraps an async throwing function into a reusable safe version returning a `ResultAsync`.
+   * The async counterpart of {@link Result.fromThrowable}.
+   *
+   * @example
+   * const safeFetch = ResultAsync.fromThrowable(
+   *   (url: string) => fetch(url).then((r) => r.json()),
+   *   (e) => `request failed: ${e}`
+   * );
+   * await safeFetch('/api'); // ResultAsync<any, string>
+   */
+  static fromThrowable<A extends readonly unknown[], T, E>(
+    fn: (...args: A) => Promise<T>,
+    onError: (e: unknown) => E
+  ): (...args: A) => ResultAsync<T, E> {
+    return (...args: A) => ResultAsync.try(() => fn(...args), onError)
   }
 
   /**
@@ -547,6 +606,26 @@ class ResultAsync<T, E> {
   }
 
   /**
+   * Applies `fn` to the `Ok` value, or resolves to `defaultValue` if `Err` — in one step.
+   *
+   * @example
+   * await ResultAsync.ok<number, string>(2).mapOr(0, (x) => x * 10); // 20
+   */
+  mapOr<U>(defaultValue: MaybePromise<U>, fn: (value: T) => MaybePromise<U>): Promise<U> {
+    return this.promise.then((res) => res.match({ ok: (v) => fn(v), err: () => defaultValue }))
+  }
+
+  /**
+   * Applies `fn` to the `Ok` value, or `onError` to the error if `Err` — in one step.
+   *
+   * @example
+   * await ResultAsync.err<number, string>('boom').mapOrElse((e) => e.length, (x) => x * 10); // 4
+   */
+  mapOrElse<U>(onError: (error: E) => MaybePromise<U>, fn: (value: T) => MaybePromise<U>): Promise<U> {
+    return this.promise.then((res) => res.match({ ok: (v) => fn(v), err: (e) => onError(e) }))
+  }
+
+  /**
    * Unsafe escape hatch: resolves to the `Ok` value, or rejects if the `ResultAsync` is `Err`.
    * Prefer {@link ResultAsync.unwrapOr}/{@link ResultAsync.match} in production code.
    *
@@ -719,6 +798,26 @@ class ResultAsync<T, E> {
         })
       )
     )
+  }
+
+  /** Alias for {@link ResultAsync.tap} (Rust-style naming). */
+  inspect(fn: (value: T) => MaybePromise<void>): ResultAsync<T, E> {
+    return this.tap(fn)
+  }
+
+  /** Alias for {@link ResultAsync.tapErr} (Rust-style naming). */
+  inspectErr(fn: (error: E) => MaybePromise<void>): ResultAsync<T, E> {
+    return this.tapErr(fn)
+  }
+
+  /** Readable representation. The underlying value is async, so this shows a pending marker. */
+  toString(): string {
+    return 'ResultAsync(<pending>)'
+  }
+
+  /** Node's `util.inspect` hook. */
+  [Symbol.for('nodejs.util.inspect.custom')](): string {
+    return this.toString()
   }
 }
 

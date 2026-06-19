@@ -16,4 +16,11 @@ export type {
   FlattenResultAsync,
   FlattenOption,
   FlattenOptionAsync,
+  ResultOkType,
+  ResultErrType,
+  OptionSomeType,
+  CombineOks,
+  CombineOksObject,
+  CombineSomes,
+  CombineSomesObject,
 } from './types'

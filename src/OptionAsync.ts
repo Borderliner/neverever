@@ -3,7 +3,7 @@
 import { Result } from './Result'
 import { ResultAsync } from './ResultAsync'
 import { Option, isOption } from './Option'
-import { FlattenOptionAsync, MaybePromise, OptionLike } from './types'
+import { CombineSomes, CombineSomesObject, FlattenOptionAsync, MaybePromise, OptionLike } from './types'
 
 /**
  * A class representing an asynchronous optional value that may or may not be present.
@@ -63,15 +63,31 @@ class OptionAsync<T> {
    * `OptionAsync` of an array. Resolves to `None` if any element is `None`, otherwise `Some`
    * with every value in order.
    *
+   * Accepts a tuple/array (tuple element types preserved) or a record of `Option`-likes.
+   *
    * @example
-   * const combined = OptionAsync.combine([OptionAsync.some(1), Option.some(2)]);
-   * console.log(await combined.unwrapOr([])); // [1, 2]
+   * const combined = OptionAsync.combine([OptionAsync.some(1), Option.some('a')]);
+   * console.log(await combined.unwrapOr(['', ''])); // [1, 'a']  (typed [number, string])
    */
-  static combine<T>(options: Array<OptionLike<T>>): OptionAsync<T[]> {
+  static combine<T extends readonly OptionLike<unknown>[] | []>(options: T): OptionAsync<CombineSomes<T>>
+  static combine<T extends Record<string, OptionLike<unknown>>>(options: T): OptionAsync<CombineSomesObject<T>>
+  static combine(
+    options: ReadonlyArray<OptionLike<unknown>> | Record<string, OptionLike<unknown>>
+  ): OptionAsync<unknown> {
+    const toPromise = (o: OptionLike<unknown>): Promise<Option<unknown>> =>
+      o instanceof OptionAsync ? o.promise : Promise.resolve(o)
+    if (Array.isArray(options)) {
+      return OptionAsync._fromPromise(
+        Promise.all(options.map(toPromise)).then((resolved) => Option.combine(resolved as Option<unknown>[]))
+      )
+    }
+    const keys = Object.keys(options)
     return OptionAsync._fromPromise(
-      Promise.all(
-        options.map((o) => (o instanceof OptionAsync ? o.promise : Promise.resolve(o)))
-      ).then((resolved) => Option.combine(resolved))
+      Promise.all(keys.map((k) => toPromise((options as Record<string, OptionLike<unknown>>)[k]))).then((resolved) => {
+        const out: Record<string, Option<unknown>> = {}
+        keys.forEach((k, i) => (out[k] = resolved[i]))
+        return Option.combine(out)
+      })
     )
   }
 
@@ -437,6 +453,26 @@ class OptionAsync<T> {
   }
 
   /**
+   * Applies `fn` to the `Some` value, or resolves to `defaultValue` if `None` — in one step.
+   *
+   * @example
+   * await OptionAsync.some(2).mapOr(0, (x) => x * 10); // 20
+   */
+  mapOr<U>(defaultValue: MaybePromise<U>, fn: (value: T) => MaybePromise<U>): Promise<U> {
+    return this.promise.then((opt) => opt.match({ some: (v) => fn(v), none: () => defaultValue }))
+  }
+
+  /**
+   * Applies `fn` to the `Some` value, or computes `onNone()` if `None` — in one step.
+   *
+   * @example
+   * await OptionAsync.none<number>().mapOrElse(() => -1, (x) => x * 10); // -1
+   */
+  mapOrElse<U>(onNone: () => MaybePromise<U>, fn: (value: T) => MaybePromise<U>): Promise<U> {
+    return this.promise.then((opt) => opt.match({ some: (v) => fn(v), none: () => onNone() }))
+  }
+
+  /**
    * Unsafe escape hatch: resolves to the `Some` value, or rejects if the `OptionAsync` is `None`.
    * Prefer {@link OptionAsync.unwrapOr}/{@link OptionAsync.match} in production code.
    *
@@ -597,6 +633,21 @@ class OptionAsync<T> {
       result = result.then((opt) => fn(opt))
     }
     return result as Promise<Option<U>>
+  }
+
+  /** Alias for {@link OptionAsync.tap} (Rust-style naming). */
+  inspect(fn: (value: T) => MaybePromise<void>): OptionAsync<T> {
+    return this.tap(fn)
+  }
+
+  /** Readable representation. The underlying value is async, so this shows a pending marker. */
+  toString(): string {
+    return 'OptionAsync(<pending>)'
+  }
+
+  /** Node's `util.inspect` hook. */
+  [Symbol.for('nodejs.util.inspect.custom')](): string {
+    return this.toString()
   }
 }
 

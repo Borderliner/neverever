@@ -2,7 +2,8 @@
 
 import { Option } from './Option'
 import { ResultAsync } from './ResultAsync'
-import { FlattenResult, MaybePromise, ResultLike } from './types'
+import { CombineOks, CombineOksObject, FlattenResult, MaybePromise, ResultErrType, ResultLike } from './types'
+import { display } from './utils'
 
 /**
  * A class representing a value that is either a success (`Ok`) with a value of type `T` or a failure (`Err`) with an error of type `E`.
@@ -12,7 +13,20 @@ import { FlattenResult, MaybePromise, ResultLike } from './types'
  * @template E The type of the error value.
  */
 class Result<T, E> {
-  private constructor(private readonly isOkFlag: boolean, private readonly value?: T, private readonly error?: E) {}
+  private constructor(
+    private readonly isOkFlag: boolean,
+    /**
+     * The success value. Present (`T`) when the `Result` is `Ok`, `undefined` when `Err`.
+     * Prefer narrowing with {@link Result.isOk} (which refines this to `T`) or
+     * {@link Result.match}/{@link Result.unwrapOr} over reading it directly.
+     */
+    readonly value?: T,
+    /**
+     * The error value. Present (`E`) when the `Result` is `Err`, `undefined` when `Ok`.
+     * Prefer narrowing with {@link Result.isErr} (which refines this to `E`).
+     */
+    readonly error?: E
+  ) {}
 
   /**
    * Creates a `Result` representing a successful outcome (`Ok`) with a value.
@@ -108,6 +122,30 @@ class Result<T, E> {
   }
 
   /**
+   * Wraps a throwing function into a reusable safe version that returns a `Result` instead of
+   * throwing. Unlike {@link Result.try} (one-shot), this returns a new function you can call
+   * many times.
+   *
+   * @template A The argument types of the function.
+   * @template T The success type.
+   * @template E The error type.
+   * @param fn The (synchronous) function that may throw.
+   * @param onError Maps a thrown value to the error type `E`.
+   * @returns A function with the same arguments that returns `Result<T, E>`.
+   *
+   * @example
+   * const safeParse = Result.fromThrowable(JSON.parse, (e) => `bad json: ${e}`);
+   * safeParse('{"a":1}'); // Ok({ a: 1 })
+   * safeParse('nope');    // Err('bad json: ...')
+   */
+  static fromThrowable<A extends readonly unknown[], T, E>(
+    fn: (...args: A) => T,
+    onError: (e: unknown) => E
+  ): (...args: A) => Result<T, E> {
+    return (...args: A) => Result.try(() => fn(...args), onError) as Result<T, E>
+  }
+
+  /**
    * Combines an array of `Result`s into a single `Result` of an array.
    * Returns the first `Err` encountered, otherwise `Ok` with every value in order.
    *
@@ -116,17 +154,41 @@ class Result<T, E> {
    * @param results The array of `Result`s to combine.
    * @returns `Ok` with all values, or the first `Err`.
    *
+   * Accepts either a tuple/array of `Result`s (tuple element types are preserved) or a record
+   * of `Result`s keyed by name.
+   *
    * @example
-   * console.log(Result.combine([Result.ok(1), Result.ok(2)]).unwrapOr([])); // [1, 2]
-   * console.log(Result.combine([Result.ok<number, string>(1), Result.err<number, string>('x')]).unwrapOr([])); // []
+   * // Tuple — positional types preserved:
+   * Result.combine([Result.ok(1), Result.ok('a')]); // Result<[number, string], never>
+   * // Record — keys preserved:
+   * Result.combine({ id: Result.ok(1), name: Result.ok('a') }); // Result<{ id: number; name: string }, never>
+   * // First Err short-circuits:
+   * Result.combine([Result.ok<number, string>(1), Result.err<number, string>('x')]); // Err('x')
    */
-  static combine<T, E>(results: Array<Result<T, E>>): Result<T[], E> {
-    const values: T[] = []
-    for (const result of results) {
-      if (result.isErr()) return new Result<T[], E>(false, undefined, result.error!)
-      values.push(result.value!)
+  static combine<T extends readonly Result<unknown, unknown>[] | []>(
+    results: T
+  ): Result<CombineOks<T>, ResultErrType<T[number]>>
+  static combine<T extends Record<string, Result<unknown, unknown>>>(
+    results: T
+  ): Result<CombineOksObject<T>, ResultErrType<T[keyof T]>>
+  static combine(
+    results: ReadonlyArray<Result<unknown, unknown>> | Record<string, Result<unknown, unknown>>
+  ): Result<unknown, unknown> {
+    if (Array.isArray(results)) {
+      const values: unknown[] = []
+      for (const result of results) {
+        if (result.isErr()) return new Result(false, undefined, result.error)
+        values.push(result.value)
+      }
+      return new Result(true, values, undefined)
     }
-    return new Result<T[], E>(true, values, undefined)
+    const out: Record<string, unknown> = {}
+    for (const key of Object.keys(results)) {
+      const result = (results as Record<string, Result<unknown, unknown>>)[key]
+      if (result.isErr()) return new Result(false, undefined, result.error)
+      out[key] = result.value
+    }
+    return new Result(true, out, undefined)
   }
 
   /**
@@ -138,19 +200,42 @@ class Result<T, E> {
    * @param results The array of `Result`s to combine.
    * @returns `Ok` with all values, or `Err` with an array of all errors.
    *
+   * Accepts a tuple/array or a record of `Result`s, mirroring {@link Result.combine}.
+   *
    * @example
    * const r = Result.combineWithAllErrors([Result.ok<number, string>(1), Result.err<number, string>('a'), Result.err<number, string>('b')]);
    * console.log(r.match({ ok: () => [], err: (e) => e })); // ['a', 'b']
    */
-  static combineWithAllErrors<T, E>(results: Array<Result<T, E>>): Result<T[], E[]> {
-    const values: T[] = []
-    const errors: E[] = []
-    for (const result of results) {
-      result.match({ ok: (v) => values.push(v), err: (e) => errors.push(e) })
+  static combineWithAllErrors<T extends readonly Result<unknown, unknown>[] | []>(
+    results: T
+  ): Result<CombineOks<T>, ResultErrType<T[number]>[]>
+  static combineWithAllErrors<T extends Record<string, Result<unknown, unknown>>>(
+    results: T
+  ): Result<CombineOksObject<T>, ResultErrType<T[keyof T]>[]>
+  static combineWithAllErrors(
+    results: ReadonlyArray<Result<unknown, unknown>> | Record<string, Result<unknown, unknown>>
+  ): Result<unknown, unknown[]> {
+    const errors: unknown[] = []
+    if (Array.isArray(results)) {
+      const arr = results as ReadonlyArray<Result<unknown, unknown>>
+      const values: unknown[] = []
+      for (const result of arr) {
+        result.match({ ok: (v) => void values.push(v), err: (e) => void errors.push(e) })
+      }
+      return errors.length > 0
+        ? new Result<unknown, unknown[]>(false, undefined, errors)
+        : new Result<unknown, unknown[]>(true, values, undefined)
+    }
+    const out: Record<string, unknown> = {}
+    for (const key of Object.keys(results)) {
+      ;(results as Record<string, Result<unknown, unknown>>)[key].match({
+        ok: (v) => void (out[key] = v),
+        err: (e) => void errors.push(e),
+      })
     }
     return errors.length > 0
-      ? new Result<T[], E[]>(false, undefined, errors)
-      : new Result<T[], E[]>(true, values, undefined)
+      ? new Result<unknown, unknown[]>(false, undefined, errors)
+      : new Result<unknown, unknown[]>(true, out, undefined)
   }
 
   /**
@@ -165,7 +250,7 @@ class Result<T, E> {
    * const err = Result.err<number, string>("Failed");
    * console.log(err.isOk()); // false
    */
-  isOk(): boolean {
+  isOk(): this is Result<T, E> & { readonly value: T } {
     return this.isOkFlag
   }
 
@@ -181,7 +266,7 @@ class Result<T, E> {
    * const err = Result.err<number, string>("Failed");
    * console.log(err.isErr()); // true
    */
-  isErr(): boolean {
+  isErr(): this is Result<T, E> & { readonly error: E } {
     return !this.isOkFlag
   }
 
@@ -436,6 +521,35 @@ class Result<T, E> {
   }
 
   /**
+   * Applies `fn` to the `Ok` value, or returns `defaultValue` if `Err` — in one step.
+   *
+   * @template U The result type.
+   * @param defaultValue The value to return when `Err`.
+   * @param fn Maps the `Ok` value to `U`.
+   *
+   * @example
+   * Result.ok<number, string>(2).mapOr(0, (x) => x * 10); // 20
+   * Result.err<number, string>('e').mapOr(0, (x) => x * 10); // 0
+   */
+  mapOr<U>(defaultValue: U, fn: (value: T) => U): U {
+    return this.isOkFlag ? fn(this.value!) : defaultValue
+  }
+
+  /**
+   * Applies `fn` to the `Ok` value, or `onError` to the error if `Err` — in one step.
+   *
+   * @template U The result type.
+   * @param onError Maps the error to `U` when `Err`.
+   * @param fn Maps the `Ok` value to `U`.
+   *
+   * @example
+   * Result.err<number, string>('boom').mapOrElse((e) => e.length, (x) => x * 10); // 4
+   */
+  mapOrElse<U>(onError: (error: E) => U, fn: (value: T) => U): U {
+    return this.isOkFlag ? fn(this.value!) : onError(this.error!)
+  }
+
+  /**
    * Unsafe escape hatch: returns the `Ok` value, or throws if the `Result` is `Err`.
    * Prefer {@link Result.unwrapOr}/{@link Result.match} in production code.
    *
@@ -656,6 +770,41 @@ class Result<T, E> {
       ok: (value) => ResultAsync.ok<T, E>(value),
       err: (error) => ResultAsync.err<T, E>(error),
     })
+  }
+
+  /** Alias for {@link Result.tap} (Rust-style naming). */
+  inspect(fn: (value: T) => Promise<void>): ResultAsync<T, E>
+  inspect(fn: (value: T) => void): Result<T, E>
+  inspect(fn: (value: T) => MaybePromise<void>): Result<T, E> | ResultAsync<T, E> {
+    if (!this.isOkFlag) return this
+    const out = fn(this.value!)
+    return out instanceof Promise ? ResultAsync._fromPromise(out.then(() => this as Result<T, E>)) : this
+  }
+
+  /** Alias for {@link Result.tapErr} (Rust-style naming). */
+  inspectErr(fn: (error: E) => Promise<void>): ResultAsync<T, E>
+  inspectErr(fn: (error: E) => void): Result<T, E>
+  inspectErr(fn: (error: E) => MaybePromise<void>): Result<T, E> | ResultAsync<T, E> {
+    if (this.isOkFlag) return this
+    const out = fn(this.error!)
+    return out instanceof Promise ? ResultAsync._fromPromise(out.then(() => this as Result<T, E>)) : this
+  }
+
+  /**
+   * Returns a readable representation, e.g. `Ok(42)` or `Err("boom")`.
+   */
+  toString(): string {
+    return this.isOkFlag ? `Ok(${display(this.value)})` : `Err(${display(this.error)})`
+  }
+
+  /** Node's `util.inspect` hook, so `console.log` prints `Ok(42)` instead of internal fields. */
+  [Symbol.for('nodejs.util.inspect.custom')](): string {
+    return this.toString()
+  }
+
+  /** JSON representation: `{ type: 'Ok', value }` or `{ type: 'Err', error }`. */
+  toJSON(): { type: 'Ok'; value: T } | { type: 'Err'; error: E } {
+    return this.isOkFlag ? { type: 'Ok', value: this.value! } : { type: 'Err', error: this.error! }
   }
 }
 

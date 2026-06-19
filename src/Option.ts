@@ -2,7 +2,8 @@
 
 import { OptionAsync } from './OptionAsync'
 import { Result } from './Result'
-import { FlattenOption, MaybePromise, OptionLike } from './types'
+import { CombineSomes, CombineSomesObject, FlattenOption, MaybePromise, OptionLike } from './types'
+import { display } from './utils'
 
 /**
  * A class representing an optional value that may or may not be present.
@@ -12,7 +13,15 @@ import { FlattenOption, MaybePromise, OptionLike } from './types'
  * @template T The type of the value contained in the Option.
  */
 class Option<T> {
-  private constructor(private readonly isSomeFlag: boolean, private readonly value?: T) {}
+  private constructor(
+    private readonly isSomeFlag: boolean,
+    /**
+     * The contained value. Present (`T`) when the Option is `Some`, `undefined` when `None`.
+     * Prefer narrowing with {@link Option.isSome} (which refines this to `T`) or
+     * {@link Option.match}/{@link Option.unwrapOr} over reading it directly.
+     */
+    readonly value?: T
+  ) {}
 
   private static readonly NONE = new Option<never>(false)
 
@@ -92,17 +101,32 @@ class Option<T> {
    * @param options The array of `Option`s to combine.
    * @returns `Some` with all values, or `None`.
    *
+   * Accepts either a tuple/array of `Option`s (tuple element types are preserved) or a record
+   * of `Option`s keyed by name.
+   *
    * @example
-   * console.log(Option.combine([Option.some(1), Option.some(2)]).unwrapOr([])); // [1, 2]
-   * console.log(Option.combine([Option.some(1), Option.none<number>()]).unwrapOr([])); // []
+   * Option.combine([Option.some(1), Option.some('a')]); // Option<[number, string]>
+   * Option.combine({ id: Option.some(1), name: Option.some('a') }); // Option<{ id: number; name: string }>
+   * Option.combine([Option.some(1), Option.none<number>()]); // None
    */
-  static combine<T>(options: Array<Option<T>>): Option<T[]> {
-    const values: T[] = []
-    for (const option of options) {
-      if (option.isNone()) return Option.none()
-      values.push(option.value!)
+  static combine<T extends readonly Option<unknown>[] | []>(options: T): Option<CombineSomes<T>>
+  static combine<T extends Record<string, Option<unknown>>>(options: T): Option<CombineSomesObject<T>>
+  static combine(options: ReadonlyArray<Option<unknown>> | Record<string, Option<unknown>>): Option<unknown> {
+    if (Array.isArray(options)) {
+      const values: unknown[] = []
+      for (const option of options) {
+        if (option.isNone()) return Option.none()
+        values.push(option.value)
+      }
+      return new Option(true, values)
     }
-    return new Option<T[]>(true, values)
+    const out: Record<string, unknown> = {}
+    for (const key of Object.keys(options)) {
+      const option = (options as Record<string, Option<unknown>>)[key]
+      if (option.isNone()) return Option.none()
+      out[key] = option.value
+    }
+    return new Option(true, out)
   }
 
   /**
@@ -116,7 +140,7 @@ class Option<T> {
    * console.log(some.isSome()); // true
    * console.log(none.isSome()); // false
    */
-  isSome(): boolean {
+  isSome(): this is Option<T> & { readonly value: T } {
     return this.isSomeFlag
   }
 
@@ -327,6 +351,27 @@ class Option<T> {
   }
 
   /**
+   * Applies `fn` to the `Some` value, or returns `defaultValue` if `None` — in one step.
+   *
+   * @example
+   * Option.some(2).mapOr(0, (x) => x * 10); // 20
+   * Option.none<number>().mapOr(0, (x) => x * 10); // 0
+   */
+  mapOr<U>(defaultValue: U, fn: (value: T) => U): U {
+    return this.isSomeFlag ? fn(this.value!) : defaultValue
+  }
+
+  /**
+   * Applies `fn` to the `Some` value, or computes `onNone()` if `None` — in one step.
+   *
+   * @example
+   * Option.none<number>().mapOrElse(() => -1, (x) => x * 10); // -1
+   */
+  mapOrElse<U>(onNone: () => U, fn: (value: T) => U): U {
+    return this.isSomeFlag ? fn(this.value!) : onNone()
+  }
+
+  /**
    * Unsafe escape hatch: returns the `Some` value, or throws if the Option is `None`.
    * Prefer {@link Option.unwrapOr}/{@link Option.match} in production code.
    *
@@ -471,6 +516,30 @@ class Option<T> {
       result = Promise.resolve(result).then((opt) => fn(opt as Option<T>))
     }
     return result as MaybePromise<Option<U>>
+  }
+
+  /** Alias for {@link Option.tap} (Rust-style naming). */
+  inspect(fn: (value: T) => Promise<void>): OptionAsync<T>
+  inspect(fn: (value: T) => void): Option<T>
+  inspect(fn: (value: T) => MaybePromise<void>): Option<T> | OptionAsync<T> {
+    if (!this.isSomeFlag) return this
+    const out = fn(this.value!)
+    return out instanceof Promise ? OptionAsync._fromPromise(out.then(() => this as Option<T>)) : this
+  }
+
+  /** Returns a readable representation, e.g. `Some(42)` or `None`. */
+  toString(): string {
+    return this.isSomeFlag ? `Some(${display(this.value)})` : 'None'
+  }
+
+  /** Node's `util.inspect` hook, so `console.log` prints `Some(42)`/`None`. */
+  [Symbol.for('nodejs.util.inspect.custom')](): string {
+    return this.toString()
+  }
+
+  /** JSON representation: `{ type: 'Some', value }` or `{ type: 'None' }`. */
+  toJSON(): { type: 'Some'; value: T } | { type: 'None' } {
+    return this.isSomeFlag ? { type: 'Some', value: this.value! } : { type: 'None' }
   }
 }
 
