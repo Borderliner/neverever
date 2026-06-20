@@ -220,6 +220,147 @@ console.log(await getName(999)); // "Unknown user"
 
 This code safely fetches a user’s profile and extracts the name, handling missing data and errors without `if` checks or try-catch.
 
+## Cookbook: Common Patterns
+
+Short, copy-pasteable recipes for everyday tasks.
+
+### Clean up and validate input (an `Option` pipeline)
+
+Chain `map` and `filter` to turn messy input into a trusted value — or `None`:
+
+```typescript
+import { Option } from 'neverever';
+
+function parseAge(input: string): Option<number> {
+  return Option.from(input)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 150);
+}
+
+console.log(parseAge('  42 ').unwrapOr(-1)); // 42
+console.log(parseAge('abc').unwrapOr(-1));   // -1  (not a number)
+console.log(parseAge('999').unwrapOr(-1));   // -1  (out of range)
+```
+
+### Chain steps that can each fail (`andThen`)
+
+`andThen` runs the next step only if the previous one was `Ok`, passing the error straight through otherwise:
+
+```typescript
+import { Result, Ok, Err } from 'neverever';
+
+const toInt = (s: string): Result<number, string> =>
+  Number.isInteger(Number(s)) ? Ok(Number(s)) : Err(`"${s}" is not an integer`);
+
+const reciprocal = (n: number): Result<number, string> =>
+  n === 0 ? Err('cannot divide by zero') : Ok(1 / n);
+
+console.log(toInt('4').andThen(reciprocal).unwrapOr(0)); // 0.25
+console.log(toInt('x').andThen(reciprocal).match({ ok: () => '', err: (e) => e })); // "x" is not an integer
+console.log(toInt('0').andThen(reciprocal).match({ ok: () => '', err: (e) => e })); // cannot divide by zero
+```
+
+### Handle both outcomes with `match`
+
+```typescript
+const label = toInt(userInput).match({
+  ok: (n) => `Got ${n}`,
+  err: (e) => `Oops: ${e}`,
+});
+```
+
+### Validate a whole form at once (`combine`)
+
+Pass an object of `Result`s and get back one `Result` of an object. By default it stops at the first error; `combineWithAllErrors` collects them all:
+
+```typescript
+import { Result, Ok, Err } from 'neverever';
+
+const required = (field: string, v: string): Result<string, string> =>
+  v.trim() ? Ok(v.trim()) : Err(`${field} is required`);
+
+// Stops at the first error:
+const user = Result.combine({
+  name: required('name', 'Ada'),
+  email: required('email', 'ada@example.com'),
+});
+// user: Result<{ name: string; email: string }, string>
+console.log(user.unwrapOr({ name: '', email: '' })); // { name: 'Ada', email: 'ada@example.com' }
+
+// Collect EVERY error:
+const errors = Result.combineWithAllErrors({
+  name: required('name', ''),
+  email: required('email', ''),
+}).match({ ok: () => 'all good', err: (errs) => errs.join(', ') });
+console.log(errors); // "name is required, email is required"
+```
+
+### Provide a fallback (`orElse`)
+
+```typescript
+import { Result, Ok, Err } from 'neverever';
+
+const fromCache = (key: string): Result<string, string> => Err('cache miss');
+const fromDisk = (key: string): Result<string, string> => Ok('value from disk');
+
+const value = fromCache('k')
+  .orElse(() => fromDisk('k')) // only runs if the cache missed
+  .unwrapOr('default');
+console.log(value); // "value from disk"
+```
+
+### Wrap throwing or nullable code from other libraries
+
+```typescript
+import { Result, Option } from 'neverever';
+
+// Turn a throwing function into a reusable safe one:
+const safeParse = Result.fromThrowable(JSON.parse, (e) => `bad json: ${String(e)}`);
+console.log(safeParse('{"ok":true}').unwrapOr(null)); // { ok: true }
+console.log(safeParse('nope').unwrapOr(null));         // null
+
+// Turn a nullable return into an Option:
+const found = Option.from(['a', 'b', 'c'].find((x) => x === 'z')); // None
+console.log(found.unwrapOr('not found')); // "not found"
+```
+
+### Convert between `Option` and `Result`
+
+```typescript
+import { Some, None, Ok } from 'neverever';
+
+console.log(Some(42).toResult('missing').unwrapOr(-1));        // 42
+console.log(None<number>().toResult('missing').unwrapOr(-1));  // -1
+console.log(Ok<number, string>(1).toOption().unwrapOr(0));     // 1  (error is dropped)
+```
+
+### Async: fetch, transform, and fall back
+
+`ResultAsync` is awaitable, and a chain becomes async automatically once any step is `async`:
+
+```typescript
+import { ResultAsync } from 'neverever';
+
+function getUser(id: number): ResultAsync<{ name: string }, string> {
+  return ResultAsync.fromPromise(
+    fetch(`/api/users/${id}`).then((r) => r.json()),
+    () => 'request failed'
+  );
+}
+
+// Chain freely, then await once at the end:
+const name = await getUser(1)
+  .map((u) => u.name)
+  .map((n) => n.toUpperCase())
+  .unwrapOr('UNKNOWN');
+
+// Or await to a plain Result and read the value after a check:
+const res = await getUser(1);
+if (res.isOk()) console.log(res.value.name);
+```
+
 ## Common Methods
 
 Here are some key methods you’ll use a lot:
